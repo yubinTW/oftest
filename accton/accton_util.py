@@ -128,7 +128,7 @@ def encode_l2_overlay_group_id(tunnel_id, subtype, index):
     index = index & 0x3f       #10 bits
     return index + (tunnel_id << OFDPA_TUNNEL_ID_SHIFT)+ (subtype<<OFDPA_TUNNEL_SUBTYPE_SHIFT)+(8 << OFDPA_GROUP_TYPE_SHIFT)
 
-def add_l2_interface_grouop(ctrl, ports, vlan_id=1, is_tagged=False, send_barrier=False):
+def add_l2_interface_group(ctrl, ports, vlan_id=1, is_tagged=False, send_barrier=False):
     # group table
     # set up untag groups for each port
     group_id_list=[]
@@ -163,7 +163,7 @@ def add_l2_interface_grouop(ctrl, ports, vlan_id=1, is_tagged=False, send_barrie
  
     return group_id_list, msgs
 
-def add_one_l2_interface_grouop(ctrl, port, vlan_id=1, is_tagged=False, send_barrier=False):
+def add_one_l2_interface_group(ctrl, port, vlan_id=1, is_tagged=False, send_barrier=False):
     # group table
     # set up untag groups for each port
     group_id = encode_l2_interface_group_id(vlan_id, port)
@@ -388,7 +388,33 @@ def add_port_table_flow(ctrl, is_overlay=True):
     logging.info("Add port table, match port %lx" % 0x10000)
     ctrl.message_send(request)
     
-    
+
+def pop_vlan_flow(ctrl, ports, vlan_id=1):
+    # table 10: vlan
+    # goto to table 20
+    msgs=[]
+    for of_port in ports:
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.pop_vlan()
+                    ]
+                  ),
+                  ofp.instruction.goto_table(20)
+                ],
+                priority=0)
+            logging.info("Add vlan %d tagged packets on port %d and go to table 20" %( vlan_id, of_port))
+            ctrl.message_send(request)
+
+
+    return msgs
 
 def add_vlan_table_flow(ctrl, ports, vlan_id=1, flag=VLAN_TABLE_FLAG_ONLY_BOTH, send_barrier=False):
     # table 10: vlan
@@ -404,6 +430,11 @@ def add_vlan_table_flow(ctrl, ports, vlan_id=1, flag=VLAN_TABLE_FLAG_ONLY_BOTH, 
                 cookie=42,
                 match=match,
                 instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.pop_vlan()
+                    ]
+                  ),
                   ofp.instruction.goto_table(20)
                 ],
                 priority=0)
@@ -413,7 +444,7 @@ def add_vlan_table_flow(ctrl, ports, vlan_id=1, flag=VLAN_TABLE_FLAG_ONLY_BOTH, 
         if (flag == VLAN_TABLE_FLAG_ONLY_UNTAG) or (flag == VLAN_TABLE_FLAG_ONLY_BOTH):
             match = ofp.match()
             match.oxm_list.append(ofp.oxm.in_port(of_port))
-            match.oxm_list.append(ofp.oxm.vlan_vid_masked(0, 0xfff))
+            match.oxm_list.append(ofp.oxm.vlan_vid_masked(0, 0x1fff))
             request = ofp.message.flow_add(
                 table_id=10,
                 cookie=42,
@@ -421,7 +452,7 @@ def add_vlan_table_flow(ctrl, ports, vlan_id=1, flag=VLAN_TABLE_FLAG_ONLY_BOTH, 
                 instructions=[
                   ofp.instruction.apply_actions(
                     actions=[
-                      ofp.action.set_field(ofp.oxm.vlan_vid(0x1000+vlan_id))
+                      ofp.action.set_field(ofp.oxm.vlan_vid(vlan_id))
                     ]
                   ),
                   ofp.instruction.goto_table(20)
@@ -517,20 +548,19 @@ def add_vlan_table_flow_allow_all_vlan(ctrl, in_port, send_barrier=False):
     logging.info("Add allow all vlan on port %d " %(in_port))
     ctrl.message_send(request)    
 
-    
 def add_one_vlan_table_flow(ctrl, of_port, vlan_id=1, vrf=0, flag=VLAN_TABLE_FLAG_ONLY_BOTH, send_barrier=False):
     # table 10: vlan
     # goto to table 20
     if (flag == VLAN_TABLE_FLAG_ONLY_TAG) or (flag == VLAN_TABLE_FLAG_ONLY_BOTH):
         match = ofp.match()
         match.oxm_list.append(ofp.oxm.in_port(of_port))
-        match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+        match.oxm_list.append(ofp.oxm.vlan_vid_masked(0x1000+vlan_id,0x1fff))
 
         actions=[]
         if vrf!=0:
             actions.append(ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=vrf)))
             
-        actions.append(ofp.action.set_field(ofp.oxm.vlan_vid(value=vlan_id)))
+        #actions.append(ofp.action.set_field(ofp.oxm.vlan_vid(value=vlan_id)))
 
         request = ofp.message.flow_add(
             table_id=10,
@@ -549,13 +579,13 @@ def add_one_vlan_table_flow(ctrl, of_port, vlan_id=1, vrf=0, flag=VLAN_TABLE_FLA
     if (flag == VLAN_TABLE_FLAG_ONLY_UNTAG) or (flag == VLAN_TABLE_FLAG_ONLY_BOTH):
         match = ofp.match()
         match.oxm_list.append(ofp.oxm.in_port(of_port))
-        match.oxm_list.append(ofp.oxm.vlan_vid(0))
+        match.oxm_list.append(ofp.oxm.vlan_vid_masked(0, 0x1fff))
         
         actions=[]
         if vrf!=0:
             actions.append(ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=vrf)))
             
-        actions.append(ofp.action.set_field(ofp.oxm.vlan_vid(0x1000+vlan_id)))
+        actions.append(ofp.action.set_field(ofp.oxm.vlan_vid(vlan_id)))
         
         request = ofp.message.flow_add(
             table_id=10,
@@ -578,7 +608,9 @@ def add_one_vlan_table_flow(ctrl, of_port, vlan_id=1, vrf=0, flag=VLAN_TABLE_FLA
     
 def add_bridge_flow(ctrl, dst_mac, vlanid, group_id, send_barrier=False):
     match = ofp.match()
+    priority=500
     if dst_mac!=None:
+        priority=1000
         match.oxm_list.append(ofp.oxm.eth_dst(dst_mac))
 
     match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlanid))
@@ -594,7 +626,7 @@ def add_bridge_flow(ctrl, dst_mac, vlanid, group_id, send_barrier=False):
                     ofp.instruction.goto_table(60)
                 ],
             buffer_id=ofp.OFP_NO_BUFFER,
-            priority=1000) 
+            priority=priority)
 
     logging.info("Inserting Brdige flow vlan %d, mac %s", vlanid, dst_mac)
     ctrl.message_send(request)
@@ -698,7 +730,39 @@ def add_unicast_routing_flow(ctrl, eth_type, dst_ip, mask, action_group_id, vrf=
         do_barrier(ctrl)   
 
     return request        
-        
+
+def add_mpls_flow(ctrl, action_group_id, label=100 ,ethertype=0x0800, bos=1, send_barrier=False):
+    match = ofp.match()
+    match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+    match.oxm_list.append(ofp.oxm.mpls_label(label))
+    match.oxm_list.append(ofp.oxm.mpls_bos(bos))
+    actions = [ofp.action.dec_mpls_ttl(),
+               ofp.action.copy_ttl_in(),
+               ofp.action.pop_mpls(ethertype)]
+    request = ofp.message.flow_add(
+            table_id=24,
+            cookie=43,
+            match=match,
+            instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=actions
+                    ),
+                    ofp.instruction.write_actions(
+                        actions=[ofp.action.group(action_group_id)]),
+                    ofp.instruction.goto_table(60)
+                ],
+            buffer_id=ofp.OFP_NO_BUFFER,
+            priority=1)
+
+    logging.info("Inserting MPLS flow , label %ld", label)
+    ctrl.message_send(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return request
+
+
 def add_mcast4_routing_flow(ctrl, vlan_id, src_ip, src_ip_mask, dst_ip, action_group_id, send_barrier=False):
     match = ofp.match()
     match.oxm_list.append(ofp.oxm.eth_type(0x0800))
