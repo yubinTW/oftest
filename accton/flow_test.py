@@ -32,7 +32,7 @@ class L2McastFlow(base_tests.SimpleDataPlane):
 
         # group table
         # set up untag groups for each port
-        add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)
+        add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)
 
         # set up multicast group
         add_l2_mcast_group(self.controller, config["port_map"].keys(), 1, 1)
@@ -78,7 +78,7 @@ class L2UnicastFlow(base_tests.SimpleDataPlane):
 
         # group table
         # set up tag groups for each port
-        add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1, True, 1)
+        add_l2_interface_group(self.controller, config["port_map"].keys(), 1, True, 1)
 
         for port in ports:
             group_id = encode_l2_interface_group_id(1, port)
@@ -122,7 +122,7 @@ class L2Flood(base_tests.SimpleDataPlane):
 
         # group table
         # set up untag groups for each port
-        add_l2_interface_grouop(self.controller, ports, 1,  False, 1)
+        add_l2_interface_group(self.controller, ports, 1,  False, 1)
 
         input_port = ports.pop()
         flood_ports= ports
@@ -165,7 +165,8 @@ class L2Flood(base_tests.SimpleDataPlane):
         pkt = str(parsed_pkt)
         self.dataplane.send(input_port, pkt)
         for ofport in flood_ports:
-            verify_packet(self, pkt, ofport)        
+            if ofport is not input_port:
+                verify_packet(self, pkt, ofport)
         
 class PacketInMiss(base_tests.SimpleDataPlane):
     """
@@ -192,7 +193,7 @@ class PacketInMiss(base_tests.SimpleDataPlane):
 
         # group table
         # set up untag groups for each port
-        add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, 1)
+        add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, 1)
 
         # create match
         match = ofp.match()
@@ -217,13 +218,13 @@ class PacketInMiss(base_tests.SimpleDataPlane):
 
         for of_port in config["port_map"].keys():
             logging.info("PacketInMiss test, port %d", of_port)
-            self.dataplane.send(of_port, pkt)
+            self.dataplane.send(of_port, vlan_pkt)
 
             #AOS current packet in will not have vlan tag
             if config["cicada_poject"]:
                 verify_packet_in(self, vlan_pkt, of_port, ofp.OFPR_ACTION)
             else:
-                verify_packet_in(self, pkt, of_port, ofp.OFPR_ACTION)
+                verify_packet_in(self, vlan_pkt, of_port, ofp.OFPR_ACTION)
 
             verify_no_other_packets(self)
 
