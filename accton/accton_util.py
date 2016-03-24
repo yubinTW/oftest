@@ -128,6 +128,9 @@ def encode_l2_overlay_group_id(tunnel_id, subtype, index):
     index = index & 0x3f       #10 bits
     return index + (tunnel_id << OFDPA_TUNNEL_ID_SHIFT)+ (subtype<<OFDPA_TUNNEL_SUBTYPE_SHIFT)+(8 << OFDPA_GROUP_TYPE_SHIFT)
 
+def encode_trunk_group_id(id):
+    return id + (0xF << OFDPA_GROUP_TYPE_SHIFT)
+
 def add_l2_interface_group(ctrl, ports, vlan_id=1, is_tagged=False, send_barrier=False):
     # group table
     # set up untag groups for each port
@@ -366,7 +369,20 @@ def add_l2_overlay_mcast_over_mcast_tunnel_group(ctrl, tunnel_id, ports, index):
                                    )
     ctrl.message_send(request)
     return request
-	
+
+def add_trunk_group(ctrl, ports, id):
+    buckets=[]
+    for port in ports:
+        buckets.append(ofp.bucket(actions=[ofp.action.output(port)]))
+
+    group_id =encode_trunk_group_id(id)
+    request = ofp.message.group_add(group_type=ofp.OFPGT_SELECT,
+                                    group_id=group_id,
+                                    buckets=buckets
+                                   )
+    ctrl.message_send(request)
+    return request
+
 def add_port_table_flow(ctrl, is_overlay=True):
     match = ofp.match()
 
@@ -430,11 +446,6 @@ def add_vlan_table_flow(ctrl, ports, vlan_id=1, flag=VLAN_TABLE_FLAG_ONLY_BOTH, 
                 cookie=42,
                 match=match,
                 instructions=[
-                  ofp.instruction.apply_actions(
-                    actions=[
-                      ofp.action.pop_vlan()
-                    ]
-                  ),
                   ofp.instruction.goto_table(20)
                 ],
                 priority=0)
