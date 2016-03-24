@@ -840,24 +840,24 @@ class encap_mpls_l3(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x90000001 group=any,port=any,weight=0 set_field=eth_src=00:00:04:22:33:55,set_field=eth_dst=00:00:04:22:44:66,set_field=vlan_vid=2,group=0x2000"+str(output_port))
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x92000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ttl_out,group=0x90000001")
-        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.2.2/255.255.255.0 write:group=0x92000001 goto:60")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.3.2/255.255.255.0 write:group=0x92000001 goto:60")
 
-        input_pkt = simple_packet(
-                '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 02 '
-                '08 00 45 00 00 4e 04 d2 00 00 7f 00 b0 81 c0 a8 '
-                '03 0a c0 a8 02 02 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
-
+        input_pkt = simple_tcp_packet(pktlen=96,
+                                       eth_dst='00:00:00:11:33:55',
+                                       eth_src='00:00:00:11:22:33',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=2,
+                                       dl_vlan_enable=True)
         output_pkt = simple_packet(
                 '00 00 04 22 44 66 00 00 04 22 33 55 81 00 00 02 '
-                '88 47 00 90 1f fa 45 00 00 4e 04 d2 00 00 7e 00 '
-                'b1 81 c0 a8 03 0a c0 a8 02 02 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00')
+                '88 47 00 90 1f fa 45 00 00 4e 00 01 00 00 3f 06 '
+                'f2 4c c0 a8 05 0a c0 a8 03 02 04 d2 00 50 00 00 '
+                '00 00 00 00 00 00 50 02 20 00 f0 2c 00 00 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
@@ -946,24 +946,25 @@ class encap_2mpls_l3(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x90000001 group=any,port=any,weight=0 set_field=eth_src=00:00:04:22:33:55,set_field=eth_dst=00:00:04:22:44:66,set_field=vlan_vid=2,group=0x2000"+str(output_port))
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x93000001 group=any,port=any,weight=0 set_field=mpls_label:0x903,push_mpls=0x8847,group=0x90000001")
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x92000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ttl_out,group=0x93000001")
-        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.2.2/255.255.255.0 write:group=0x92000001 goto:60")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.3.2/255.255.255.0 write:group=0x92000001 goto:60")
 
-        input_pkt = simple_packet(
-                '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 02 '
-                '08 00 45 00 00 4e 04 d2 00 00 7f 00 b0 81 c0 a8 '
-                '03 0a c0 a8 02 02 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+        input_pkt = simple_tcp_packet(pktlen=96,
+                                       eth_dst='00:00:00:11:33:55',
+                                       eth_src='00:00:00:11:22:33',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=2,
+                                       dl_vlan_enable=True)
 
         output_pkt = simple_packet(
                 '00 00 04 22 44 66 00 00 04 22 33 55 81 00 00 02 '
-                '88 47 00 90 3e fa 00 90 1f fa 45 00 00 4e 04 d2 '
-                '00 00 7e 00 b1 81 c0 a8 03 0a c0 a8 02 02 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00')
+                '88 47 00 90 3e fa 00 90 1f fa 45 00 00 4e 00 01 '
+                '00 00 3f 06 f2 4c c0 a8 05 0a c0 a8 03 02 04 d2 '
+                '00 50 00 00 00 00 00 00 00 00 50 02 20 00 f0 2c '
+                '00 00 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
@@ -1001,24 +1002,23 @@ class decap_2mpls_l3(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:04:22:33:55,eth_type=0x8847 goto:24")
         apply_dpctl_mod(self, config, "flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24")
         apply_dpctl_mod(self, config, "flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1,ofdpa_mpls_data_first_nibble=4 apply:mpls_dec,pop_mpls=0x0800,set_field=ofdpa_vrf:1 goto:30")
-        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.2.2/255.255.255.0,ofdpa_vrf=1 write:group=0x20000003 goto:60")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.3.2/255.255.255.0,ofdpa_vrf=1 write:group=0x20000003 goto:60")
 
         input_pkt = simple_packet(
                 '00 00 04 22 33 55 00 00 04 22 44 66 81 00 00 02 '
-                '88 47 00 90 3e fa 00 90 1f fa 45 00 00 26 00 00 '
-                '00 00 7e 06 b6 75 c0 a8 03 02 c0 a8 02 0a 00 03 '
-                '00 06 00 01 f7 fa 00 00 00 00 50 00 04 00 2f 5d '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00')
-
+                '88 47 00 90 3e fa 00 90 1f fa 45 00 00 4e 00 01 '
+                '00 00 3f 06 f2 4c c0 a8 05 0a c0 a8 03 02 04 d2 '
+                '00 50 00 00 00 00 00 00 00 00 50 02 20 00 f0 2c '
+                '00 00 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44')
         output_pkt = simple_packet(
                 '00 00 06 22 44 66 00 00 06 22 33 55 81 00 00 02 '
-                '08 00 45 00 00 26 00 00 00 00 f9 06 3b 75 c0 a8 '
-                '03 02 c0 a8 02 0a 00 03 00 06 00 01 f7 fa 00 00 '
-                '00 00 50 00 04 00 2f 5d 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+                '08 00 45 00 00 4e 00 01 00 00 f9 06 38 4c c0 a8 '
+                '05 0a c0 a8 03 02 04 d2 00 50 00 00 00 00 00 00 '
+                '00 00 50 02 20 00 f0 2c 00 00 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
@@ -1060,24 +1060,25 @@ class encap_3mpls_l3(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x94000001 group=any,port=any,weight=0 push_mpls=0x8847,set_field=mpls_label:0x904,group=0x90000001")
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x93000001 group=any,port=any,weight=0 set_field=mpls_label:0x903,push_mpls=0x8847,group=0x94000001")
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x92000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ttl_out,group=0x93000001")
-        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.2.2/255.255.255.0 write:group=0x92000001 goto:60")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.3.2/255.255.255.0 write:group=0x92000001 goto:60")
 
-        input_pkt = simple_packet(
-                '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 02 '
-                '08 00 45 00 00 4e 04 d2 00 00 7f 00 b0 81 c0 a8 '
-                '03 0a c0 a8 02 02 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+        input_pkt = simple_tcp_packet(pktlen=96,
+                                       eth_dst='00:00:00:11:33:55',
+                                       eth_src='00:00:00:11:22:33',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=2,
+                                       dl_vlan_enable=True)
 
         output_pkt = simple_packet(
                 '00 00 04 22 44 66 00 00 04 22 33 55 81 00 00 02 '
                 '88 47 00 90 4e fa 00 90 3e fa 00 90 1f fa 45 00 '
-                '00 4e 04 d2 00 00 7e 00 b1 81 c0 a8 03 0a c0 a8 '
-                '02 02 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00')
+                '00 4e 00 01 00 00 3f 06 f2 4c c0 a8 05 0a c0 a8 '
+                '03 02 04 d2 00 50 00 00 00 00 00 00 00 00 50 02 '
+                '20 00 f0 2c 00 00 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
