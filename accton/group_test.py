@@ -374,7 +374,7 @@ class L3McastGroup(base_tests.SimpleDataPlane):
         msg4=add_l3_interface_group(self.controller, config["port_map"].keys()[0], 2, 2, [0x00,0x11,0x22,0x33,0x44,0x22])
         group_list2_1, msg5 = add_l2_interface_group(self.controller, [config["port_map"].keys()[1]], 2,  False, False)
         msg6=add_l3_interface_group(self.controller, config["port_map"].keys()[1], 2, 3, [0x00,0x11,0x22,0x33,0x44,0x33])
-        group_list3, msg7 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 3,  False, False)
+        group_list3, msg7 = add_l2_interface_group(self.controller, config["port_map"].keys(), 3,  False, False)
         
         group_actions=[msg2.group_id, msg4.group_id, msg6.group_id]
         group_actions.extend(group_list3)
