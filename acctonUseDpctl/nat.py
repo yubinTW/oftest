@@ -249,17 +249,25 @@ class snat(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "flow-mod table=29,cmd=add,prio=291 eth_type=0x800,ip_src=10.0.0.1,ip_proto=6,tcp_src=2000 write:set_field=ip_src:100.0.0.1,set_field=tcp_src:5000 goto:30")
         apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=200.0.0.1/255.255.255.0 write:group=0x22000002 goto:60")
 
-        input_pkt = simple_packet(
-                '00 00 00 00 01 00 00 00 00 00 02 00 81 00 00 64 '
-                '08 00 45 00 00 2e 04 d2 00 00 7f 06 64 f6 0a 00 '
-                '00 01 c8 00 00 01 07 d0 0b 0c 00 01 f7 fa 00 00 '
-                '00 00 50 00 04 00 cf 04 00 00 00 00 00 00 00 00')
+        input_pkt = simple_tcp_packet(pktlen=100,
+                                    eth_dst='00:00:00:00:01:00',
+                                    eth_src='00:00:00:00:02:00',
+                                    ip_src='10.0.0.1',
+                                    ip_dst='200.0.0.01',
+                                    ip_ttl=64,
+                                    tcp_sport=2000,
+                                    tcp_dport=2828,
+                                    vlan_vid=100,
+                                    dl_vlan_enable=True)
 
         output_pkt = simple_packet(
                 '00 00 00 00 02 01 00 00 00 00 02 00 81 00 00 c8 '
-                '08 00 45 00 00 2e 04 d2 00 00 7e 06 0b f6 64 00 '
-                '00 01 c8 00 00 01 13 88 0b 0c 00 01 f7 fa 00 00 '
-                '00 00 50 00 04 00 69 4c 00 00 00 00 00 00 00 00')
+                '08 00 45 00 00 52 00 01 00 00 3f 06 4f a3 64 00 '
+                '00 01 c8 00 00 01 13 88 0b 0c 00 00 00 00 00 00 '
+                '00 00 50 02 20 00 ab 88 00 00 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
+                '44 44 44 44')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
