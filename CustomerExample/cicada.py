@@ -16,7 +16,7 @@ class RedirectArpToSpecifyPortOrController(base_tests.SimpleDataPlane):
 
         test_vid =2
         #add vlan flow to pass vlan verification
-        add_l2_interface_grouop(self.controller, test_ports, vlan_id=test_vid, is_tagged=True, send_barrier=False)
+        add_l2_interface_group(self.controller, test_ports, vlan_id=test_vid, is_tagged=True, send_barrier=False)
         add_vlan_table_flow(self.controller, test_ports, vlan_id=test_vid, flag=VLAN_TABLE_FLAG_ONLY_TAG, send_barrier=False)
         
         #get a port to be the flood destination port, 
