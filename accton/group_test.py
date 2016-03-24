@@ -53,8 +53,8 @@ class L2InterfaceGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)
         delete_all_groups(self.controller)    
 
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)
-        group_list2, msg2 =add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)
+        group_list2, msg2 =add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)       
         
         stats = get_stats(self, ofp.message.group_desc_stats_request())
  
@@ -82,10 +82,10 @@ class L2McastGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)       
         msg2=add_l2_mcast_group(self.controller, config["port_map"].keys(), 1, 1)
         
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)               
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)               
         msg4=add_l2_mcast_group(self.controller, config["port_map"].keys(), 2, 2)
 
         stats = get_stats(self, ofp.message.group_desc_stats_request())
@@ -127,10 +127,10 @@ class L2FloodGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)       
         msg2=add_l2_flood_group(self.controller, config["port_map"].keys(), 1, 1)
         
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)               
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)               
         msg4=add_l2_flood_group(self.controller, config["port_map"].keys(), 2, 2)
 
         stats = get_stats(self, ofp.message.group_desc_stats_request())
@@ -172,10 +172,10 @@ class L2RewriteGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)       
         msg2=add_l2_rewrite_group(self.controller, config["port_map"].keys()[0], 1, 1, [00,11,22,33,44,55], [00,22,22,22,22,22])
         
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)               
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)               
         msg4=add_l2_rewrite_group(self.controller, config["port_map"].keys()[0], 2, 2, [00,11,22,33,44,55], [00,33,33,33,33,33])
 
         stats = get_stats(self, ofp.message.group_desc_stats_request())
@@ -218,10 +218,10 @@ class L3UnicastGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)       
         msg2=add_l3_unicast_group(self.controller, config["port_map"].keys()[0], 1, 1, [0x00,0x11,0x22,0x33,0x44,0x55], [00,0x22,0x22,0x22,0x22,0x22])
         
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)               
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)               
         msg4=add_l3_unicast_group(self.controller, config["port_map"].keys()[0], 2, 2, [0x00,0x11,0x22,0x33,0x44,0x55], [00,0x33,0x33,0x33,0x33,0x33])
 
         stats = get_stats(self, ofp.message.group_desc_stats_request())
@@ -264,10 +264,10 @@ class L3ECMPGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)       
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)       
         msg2=add_l3_unicast_group(self.controller, config["port_map"].keys()[0], 1, 1, [0x00,0x11,0x22,0x33,0x44,0x55], [00,0x22,0x22,0x22,0x22,0x22])
         
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)               
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)               
         msg4=add_l3_unicast_group(self.controller, config["port_map"].keys()[0], 2, 2, [0x00,0x11,0x22,0x33,0x44,0x55], [00,0x33,0x33,0x33,0x33,0x33])
 
         group_ids=[msg2.group_id, msg4.group_id]
@@ -319,9 +319,9 @@ class L3InterfaceGroup(base_tests.SimpleDataPlane):
         delete_all_flows(self.controller)    
         delete_all_groups(self.controller)    
         
-        group_list1, msg1 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, False)               
+        group_list1, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, False)               
         msg2=add_l3_interface_group(self.controller, config["port_map"].keys()[0], 1, 1, [0x00,0x11,0x22,0x33,0x44,0x55])
-        group_list1, msg3 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 2,  False, False)                       
+        group_list1, msg3 = add_l2_interface_group(self.controller, config["port_map"].keys(), 2,  False, False)                       
         msg4=add_l3_interface_group(self.controller, config["port_map"].keys()[0], 2, 2, [0x00,0x11,0x22,0x33,0x44,0x66])
 
         stats = get_stats(self, ofp.message.group_desc_stats_request())
@@ -368,11 +368,11 @@ class L3McastGroup(base_tests.SimpleDataPlane):
         # Vlan 3 foward to vlan 1 port 1
         # Vlan 3 foward to vlan 2 port 1     
         # Vlan 3 foward to vlan 2 port 2             
-        group_list1_1, msg1 = add_l2_interface_grouop(self.controller, [config["port_map"].keys()[0]], 1,  False, False)               
+        group_list1_1, msg1 = add_l2_interface_group(self.controller, [config["port_map"].keys()[0]], 1,  False, False)               
         msg2=add_l3_interface_group(self.controller, config["port_map"].keys()[0], 1, 1, [0x00,0x11,0x22,0x33,0x44,0x11])
-        group_list1_2, msg3 = add_l2_interface_grouop(self.controller, [config["port_map"].keys()[0]], 2,  False, False)
+        group_list1_2, msg3 = add_l2_interface_group(self.controller, [config["port_map"].keys()[0]], 2,  False, False)
         msg4=add_l3_interface_group(self.controller, config["port_map"].keys()[0], 2, 2, [0x00,0x11,0x22,0x33,0x44,0x22])
-        group_list2_1, msg5 = add_l2_interface_grouop(self.controller, [config["port_map"].keys()[1]], 2,  False, False)
+        group_list2_1, msg5 = add_l2_interface_group(self.controller, [config["port_map"].keys()[1]], 2,  False, False)
         msg6=add_l3_interface_group(self.controller, config["port_map"].keys()[1], 2, 3, [0x00,0x11,0x22,0x33,0x44,0x33])
         group_list3, msg7 = add_l2_interface_grouop(self.controller, config["port_map"].keys(), 3,  False, False)
         
@@ -865,3 +865,33 @@ class mpls_forwarding_group_l2tag(base_tests.SimpleDataPlane):
         stats=sorted(stats, key=getkey("group_id"))  
 
         self.assertEquals(stats, verify_group_stats)  
+
+
+class TrunkGroup(base_tests.SimpleDataPlane):
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        group_list, msg1 = add_l2_interface_group(self.controller, config["port_map"].keys(), 10,  False, False)
+        msg2 = add_trunk_group(self.controller, config["port_map"].keys(), 1)
+
+        stats = get_stats(self, ofp.message.group_desc_stats_request())
+
+        verify_group_stats=[]
+        for msg in msg1:
+            verify_group_stats.append(ofp.group_desc_stats_entry(
+                                      group_type=msg.group_type,
+                                      group_id=msg.group_id,
+                                      buckets=msg.buckets)
+                                      )
+
+        verify_group_stats.append(ofp.group_desc_stats_entry(
+                                  group_type=msg2.group_type,
+                                  group_id=msg2.group_id,
+                                  buckets=msg2.buckets)
+                                  )
+
+        verify_group_stats=sorted(verify_group_stats, key=getkey("group_id"))
+        stats=sorted(stats, key=getkey("group_id"))
+        self.maxDiff=None
+        self.assertEquals(stats, verify_group_stats)
