@@ -26,7 +26,7 @@ class PacketInMiss(base_tests.SimpleDataPlane):
 
         # group table
         # set up untag groups for each port
-        add_l2_interface_grouop(self.controller, config["port_map"].keys(), 1,  False, 1)
+        add_l2_interface_group(self.controller, config["port_map"].keys(), 1,  False, 1)
 
         verify_port = config["port_map"].keys()[0]
         
