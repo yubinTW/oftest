@@ -95,14 +95,15 @@ class double_tag_to_single_tag(base_tests.SimpleDataPlane):
                 '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 06 '
                 '81 00 00 03 08 00 45 00 00 2a 04 d2 00 00 7f 00 '
                 'b2 4b c0 a8 01 64 c0 a8 02 02 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00')
 
         output_pkt = simple_packet(
                 '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 03 '
                 '08 00 45 00 00 2a 04 d2 00 00 7f 00 b2 4b c0 a8 '
                 '01 64 c0 a8 02 02 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00')
-        
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
                 
@@ -147,13 +148,14 @@ class double2single_vlan_translate(base_tests.SimpleDataPlane):
                 '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 06 '
                 '81 00 00 03 08 00 45 00 00 2a 04 d2 00 00 7f 00 '
                 'b2 4b c0 a8 01 64 c0 a8 02 02 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00')
 
         output_pkt = simple_packet(
                 '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 04 '
                 '08 00 45 00 00 2a 04 d2 00 00 7f 00 b2 4b c0 a8 '
                 '01 64 c0 a8 02 02 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00')
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)   
