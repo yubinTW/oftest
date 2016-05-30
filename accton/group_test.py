@@ -731,7 +731,7 @@ class mpls_forwarding_group_fastfailover(base_tests.SimpleDataPlane):
                                                              subtype=OFDPA_MPLS_GROUP_SUBTYPE_FAST_FAILOVER_GROUP, 
                                                              index=1, 
                                                              ref_gids=[mpls_label_gid], 
-                                                             watch_port=test_port, 
+                                                             watch_port=[test_port], 
                                                              watch_group=ofp.OFPP_ANY, 
                                                              push_vlan=None,
                                                              pop_vlan=None,
