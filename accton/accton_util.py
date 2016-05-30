@@ -18,6 +18,33 @@ OFDPA_TUNNEL_SUBTYPE_SHIFT=10
 VLAN_TABLE_FLAG_ONLY_UNTAG=1
 VLAN_TABLE_FLAG_ONLY_TAG  =2
 VLAN_TABLE_FLAG_ONLY_BOTH =3
+VLAN_TABLE_FLAG_XLATE_SINGLE =4
+VLAN_TABLE_FLAG_XLATE_SINGLE_TO_DOUBLE =5
+VLAN_TABLE_FLAG_XLATE_DOUBLE_TO_SINGLE =6
+
+VLAN_TABLE_FLAG_MPLS_ALL =1
+VLAN_TABLE_FLAG_MPLS_TAG =2
+VLAN_TABLE_FLAG_MPLS_UNTAG =3
+
+VLAN1_TABLE_FLAG_BYPASS =1
+VLAN1_TABLE_FLAG_ASSIGN =2
+VLAN1_TABLE_FLAG_MPLS =3
+
+MPLS1_TABLE_FLAG_POP_LABEL = 1
+MPLS1_TABLE_FLAG_PENULTIMATE_HOP_POP = 2
+MPLS1_TABLE_FLAG_SWAP_LABEL = 3
+MPLS1_TABLE_FLAG_SWAP_PSEUDO_WIRE_LABEL = 4
+MPLS1_TABLE_FLAG_L3_VPN_ROUTE = 5
+MPLS1_TABLE_FLAG_L3_VPN_FORWARD = 6
+MPLS1_TABLE_FLAG_L2_VPWS = 7
+
+EGRESS_VLAN_TABLE_FLAG_SWAP =1
+EGRESS_VLAN_TABLE_FLAG_SINGLE_TO_DOUBLE =2
+EGRESS_VLAN_TABLE_FLAG_DOUBLE_TO_SINGLE =3
+
+EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE =1
+EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE_SWAP =2
+EGRESS_VLAN1_TABLE_FLAG_SWAP_OUTER_VLAN =3
 
 PORT_FLOW_TABLE=0
 VLAN_FLOW_TABLE=10
@@ -616,7 +643,297 @@ def add_one_vlan_table_flow(ctrl, of_port, vlan_id=1, vrf=0, flag=VLAN_TABLE_FLA
         do_barrier(ctrl)
 
     return request
-    
+
+def add_vlan_table_flow_xlate(ctrl, ports, vlan_id=1, set_vid=2, set_ovid=6, flag=VLAN_TABLE_FLAG_XLATE_SINGLE, send_barrier=False):
+    # table 10: vlan
+    # VLAN_TABLE_FLAG_XLATE_SINGLE: match {port, vid}, apply {set_vid}, goto {20}
+    # VLAN_TABLE_FLAG_XLATE_SINGLE_TO_DOUBLE: match {port, vid}, apply {push_vlan, set_vid}, goto {20}
+    # VLAN_TABLE_FLAG_XLATE_DOUBLE_TO_SINGLE: match {port, vid}, apply {pop_vlan, set_ovid}, goto {11}
+    # goto to table 20
+    msgs=[]
+    for of_port in ports:
+        if (flag == VLAN_TABLE_FLAG_XLATE_SINGLE):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.set_field(ofp.oxm.vlan_vid(set_vid))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(20)
+                ],
+                priority=100)
+            logging.info("Add vlan %d single xlate on port %d and go to table 20" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN_TABLE_FLAG_XLATE_SINGLE_TO_DOUBLE):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.push_vlan(0x8100),
+                      ofp.action.set_field(ofp.oxm.vlan_vid(set_vid))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(20)
+                ],
+                priority=100)
+            logging.info("Add vlan %d single to double on port %d and go to table 20" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN_TABLE_FLAG_XLATE_DOUBLE_TO_SINGLE):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.pop_vlan(),
+                      ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=10, value=set_ovid))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(11)
+                ],
+                priority=100)
+            logging.info("Add vlan %d double to single on port %d and go to table 11" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return msgs
+
+def add_vlan_table_flow_mpls(ctrl, ports, vlan_id=1, set_tunnel=2, set_mpls_port=6, flag=VLAN_TABLE_FLAG_MPLS_ALL, send_barrier=False):
+    # table 10: vlan
+    # VLAN_TABLE_FLAG_MPLS_ALL: match {port}, apply {set_tunnel, set_mpls_port}, goto {13}
+    # VLAN_TABLE_FLAG_MPLS_TAG: match {port, vid}, apply {set_tunnel, set_mpls_port}, goto {13}
+    # VLAN_TABLE_FLAG_MPLS_UNTAG: match {port, vid0/0x1000}, apply {set_tunnel, set_mpls_port, set_vid}, goto {13}
+    msgs=[]
+    for of_port in ports:
+        if (flag == VLAN_TABLE_FLAG_MPLS_ALL):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel)),
+                      ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(13)
+                ],
+                priority=100)
+            logging.info("Add vlan mpls all on port %d and go to table 13" %(of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN_TABLE_FLAG_MPLS_TAG):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel)),
+                      ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(13)
+                ],
+                priority=100)
+            logging.info("Add vlan %d mpls on port %d and go to table 13" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN_TABLE_FLAG_MPLS_UNTAG):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid_masked(0, 0x1000))
+            request = ofp.message.flow_add(
+                table_id=10,
+                cookie=42,
+                match=match,
+                instructions=[
+                  ofp.instruction.apply_actions(
+                    actions=[
+                      ofp.action.set_field(ofp.oxm.vlan_id(vlan_id)),
+                      ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel)),
+                      ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
+                    ]
+                  ),
+                  ofp.instruction.goto_table(13)
+                ],
+                priority=100)
+            logging.info("Add vlan mpls untag on port %d and go to table 13" %(of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return msgs
+
+def add_vlan1_table_flow(ctrl, ports, vlan_id=1, ovid=2, set_vid=6, set_vrf=False, new_vrf=1,
+    set_mpls_l2_port=0, set_tunnel_id=0, flag=VLAN1_TABLE_FLAG_BYPASS, send_barrier=False):
+    # table 11: vlan1
+    # VLAN1_TABLE_FLAG_BYPASS: match {port, vid, ovid}, apply {set_vrf}, goto {20}
+    # VLAN1_TABLE_FLAG_ASSIGN: match {port, vid, ovid}, apply {pop_vlan, push_vlan, set_vid, set_vrf}, goto {20}
+    # VLAN1_TABLE_FLAG_MPLS: match {port, vid, ovid}, apply {pop_vlan, push_vlan, set_vid, set_vrf, set_mpls_l2_port, set_tunnel_id}, goto {20}
+    # goto to table 20
+    msgs=[]
+    for of_port in ports:
+        if (flag == VLAN1_TABLE_FLAG_BYPASS):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=0x1000+ovid))
+            if set_vrf:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.apply_actions(
+                        actions=[
+                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
+                          ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=new_vrf))
+                        ]
+                      ),
+                      ofp.instruction.goto_table(20)
+                    ],
+                    priority=100)
+            else:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.goto_table(20)
+                    ],
+                    priority=100)
+            logging.info("Add vlan1 %d on port %d and bypass to table 20" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN1_TABLE_FLAG_ASSIGN):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=0x1000+ovid))
+            if set_vrf:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.apply_actions(
+                        actions=[
+                          ofp.action.pop_vlan(),
+                          ofp.action.push_vlan(0x8100),
+                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
+                          ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=new_vrf))
+                        ]
+                      ),
+                      ofp.instruction.goto_table(20)
+                    ],
+                    priority=100)
+            else:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.apply_actions(
+                        actions=[
+                          ofp.action.pop_vlan(),
+                          ofp.action.push_vlan(0x8100),
+                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid))
+                        ]
+                      ),
+                      ofp.instruction.goto_table(20)
+                    ],
+                    priority=100)
+            logging.info("Add vlan1 %d on port %d and go to table 20" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+        if (flag == VLAN1_TABLE_FLAG_MPLS):
+            match = ofp.match()
+            match.oxm_list.append(ofp.oxm.in_port(of_port))
+            match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            if set_vrf:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.apply_actions(
+                        actions=[
+                          ofp.action.pop_vlan(),
+                          ofp.action.push_vlan(0x8100),
+                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
+                          ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=new_vrf)),
+                          ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_l2_port)),
+                          ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel_id))
+                        ]
+                      ),
+                      ofp.instruction.goto_table(20)
+                    ],
+                    priority=100)
+            else:
+                request = ofp.message.flow_add(
+                    table_id=11,
+                    cookie=42,
+                    match=match,
+                    instructions=[
+                      ofp.instruction.apply_actions(
+                        actions=[
+                          ofp.action.pop_vlan(),
+                          ofp.action.push_vlan(0x8100),
+                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
+                          ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_l2_port)),
+                          ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel_id))
+                        ]
+                      ),
+                      ofp.instruction.goto_table(13)
+                    ],
+                    priority=100)
+            logging.info("Add vlan %d mpls on port %d and go to table 13" %( vlan_id, of_port))
+            ctrl.message_send(request)
+            msgs.append(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return msgs
+
 def add_bridge_flow(ctrl, dst_mac, vlanid, group_id, send_barrier=False):
     match = ofp.match()
     priority=500
@@ -805,6 +1122,264 @@ def add_mcast4_routing_flow(ctrl, vlan_id, src_ip, src_ip_mask, dst_ip, action_g
 
     return request            
 
+def add_mpls_l2_port_flow(ctrl, tunnel_id, mpls_l2_port, action_group_id, send_barrier=False):
+    #./dpctl tcp:192.168.1.1:6633 flow-mod table=13,cmd=add,prio=113 tunn_id=0x10001,ofdpa_mpls_l2_port=100 write:group=0x91000001 goto:60
+    match = ofp.match()
+    match.oxm_list.append(ofp.oxm.tunnel_id(tunnel_id))
+    match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=8, value=mpls_l2_port))
+    request = ofp.message.flow_add(
+            table_id=13,
+            cookie=113,
+            match=match,
+            instructions=[
+                    ofp.instruction.write_actions(
+                        actions=[ofp.action.group(action_group_id)]),
+                    ofp.instruction.goto_table(60)
+                ],
+            buffer_id=ofp.OFP_NO_BUFFER,
+            priority=113)
+
+    logging.info("Inserting MPLS L2 port flow, tunn_id 0x%lX, mpls_l2_port %ld", tunnel_id, mpls_l2_port)
+    ctrl.message_send(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return request
+
+def add_mpls0_flow(ctrl, label, send_barrier=False):
+    #./dpctl tcp:192.168.1.1:6633 flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24
+    match = ofp.match()
+    match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+    match.oxm_list.append(ofp.oxm.mpls_label(label))
+    request = ofp.message.flow_add(
+            table_id=23,
+            cookie=203,
+            match=match,
+            instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.pop_mpls(0x8847),
+                            ofp.action.dec_mpls_ttl()]),
+                    ofp.instruction.goto_table(24)
+                ],
+            buffer_id=ofp.OFP_NO_BUFFER,
+            priority=203)
+
+    logging.info("Inserting MPLS0 flow, label %ld", label)
+    ctrl.message_send(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return request
+
+def add_mpls1_flow(ctrl, label, bos, flag, pop_mpls_type, group_id, set_vrf, new_vrf, pop_cw, new_mpls_port, new_tunnel, send_barrier=False):
+    """
+    MPLS1_TABLE_FLAG_POP_LABEL:
+        match {eth_type, mpls_label}, apply {pop_mpls, mpls_dec}, goto {25}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:25
+    MPLS1_TABLE_FLAG_PENULTIMATE_HOP_POP:
+        match {eth_type, mpls_label}, apply {pop_mpls, mpls_dec}, write {mpls_intf_group}, goto {60}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901 apply:pop_mpls=0x8847,mpls_dec write:group=0x90000001 goto:60
+    MPLS1_TABLE_FLAG_SWAP_LABEL:
+        match {eth_type, mpls_label}, apply {mpls_dec}, write {mpls_swap_group}, goto {60}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901 apply:mpls_dec write:group=0x95000001 goto:60
+    MPLS1_TABLE_FLAG_SWAP_PSEUDO_WIRE_LABEL:
+        match {eth_type, mpls_label, mpls_bos(1)}, apply {mpls_dec}, write {mpls_swap_group}, goto {60}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1 apply:mpls_dec write:group=0x95000001 goto:60
+    MPLS1_TABLE_FLAG_L3_VPN_ROUTE:
+        match {eth_type, mpls_label, mpls_bos(1), ofdpa_mpls_data_first_nibble}, apply {pop_mpls, mpls_dec, set_vrf}, goto {30}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x1234,mpls_bos=1,ofdpa_mpls_data_first_nibble=4 apply:mpls_dec,pop_mpls=0x0800,set_field=ofdpa_vrf:1 goto:30
+    MPLS1_TABLE_FLAG_L3_VPN_FORWARD:
+        match {eth_type, mpls_label, mpls_bos(1)}, apply {pop_mpls, mpls_dec}, goto {60}
+    MPLS1_TABLE_FLAG_L2_VPWS:
+        match {eth_type, mpls_label, mpls_bos(1)}, apply {pop_mpls, mpls_dec, ofdpa_pop_l2hdr, ofdpa_pop_cw(o), set_ofdpa_mpls_l2_port, set_tunnel_id}, write {mpls_fwd_l2_group/l2intf_group/l2unfilter_group}, goto {60}
+        ./dpctl tcp:0.0.0.0:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1 apply:pop_mpls=0x8847,mpls_dec,ofdpa_pop_l2hdr,ofdpa_pop_cw,set_field=ofdpa_mpls_l2_port:0x20100,set_field=tunn_id:0x10001 write:group=0x20001 goto:60
+    """
+    if (flag == EGRESS_VLAN_TABLE_FLAG_SWAP):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(
+                            actions=[
+                                ofp.action.pop_mpls(pop_mpls_type),
+                                ofp.action.dec_mpls_ttl()]),
+                        ofp.instruction.goto_table(25)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1_TABLE_FLAG_POP_LABEL flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_PENULTIMATE_HOP_POP):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(
+                            actions=[
+                                ofp.action.pop_mpls(pop_mpls_type),
+                                ofp.action.dec_mpls_ttl()]),
+                        ofp.instruction.write_actions(
+                            actions=[
+                                ofp.action.group(group_id)]),
+                        ofp.instruction.goto_table(60)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 Penultimate Hop Pop flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_SWAP_LABEL):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(
+                            actions=[
+                                ofp.action.dec_mpls_ttl()]),
+                        ofp.instruction.write_actions(
+                            actions=[
+                                ofp.action.group(group_id)]),
+                        ofp.instruction.goto_table(60)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 Swap Tunnel Label flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_SWAP_PSEUDO_WIRE_LABEL):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        match.oxm_list.append(ofp.oxm.mpls_bos(1))
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(
+                            actions=[
+                                ofp.action.dec_mpls_ttl()]),
+                        ofp.instruction.write_actions(
+                            actions=[
+                                ofp.action.group(group_id)]),
+                        ofp.instruction.goto_table(60)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 Swap Pseudo-wire Label flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_L3_VPN_ROUTE):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        match.oxm_list.append(ofp.oxm.mpls_bos(1))
+        if(pop_mpls_type == 0x0800):
+            match.oxm_list.append(ofp.oxm.exp1ByteValue(exp_type=11, value=4))
+        elif(pop_mpls_type == 0x86dd):
+            match.oxm_list.append(ofp.oxm.exp1ByteValue(exp_type=11, value=6))
+        if(set_vrf == True):
+            actions=[
+                ofp.action.pop_mpls(pop_mpls_type),
+                ofp.action.dec_mpls_ttl(),
+                ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=1, value=new_vrf))]
+        else:
+            actions=[
+                ofp.action.pop_mpls(pop_mpls_type),
+                ofp.action.dec_mpls_ttl()]
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(actions),
+                        ofp.instruction.goto_table(30)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 L3 VPN Route Label flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_L3_VPN_FORWARD):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        match.oxm_list.append(ofp.oxm.mpls_bos(1))
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(
+                            actions=[
+                                ofp.action.pop_mpls(pop_mpls_type)]),
+                        ofp.instruction.goto_table(60)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 L3 VPN Forward flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    elif (flag == MPLS1_TABLE_FLAG_L2_VPWS):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.eth_type(0x8847))
+        match.oxm_list.append(ofp.oxm.mpls_label(label))
+        match.oxm_list.append(ofp.oxm.mpls_bos(1))
+        if(pop_cw==True):
+            actions=[
+                ofp.action.pop_mpls(0x8847),
+                ofp.action.dec_mpls_ttl(),
+                ofp.action.ofdpa_pop_l2_header(),
+                ofp.action.ofdpa_pop_cw(),
+                ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=new_mpls_port)),
+                ofp.action.set_field(ofp.oxm.tunnel_id(new_tunnel))
+                ]
+        else:
+            actions=[
+                ofp.action.pop_mpls(0x8847),
+                ofp.action.dec_mpls_ttl(),
+                ofp.action.ofdpa_pop_l2_header(),
+                ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=new_mpls_port)),
+                ofp.action.set_field(ofp.oxm.tunnel_id(new_tunnel))
+                ]
+
+        request = ofp.message.flow_add(
+                table_id=24,
+                cookie=204,
+                match=match,
+                instructions=[
+                        ofp.instruction.apply_actions(actions),
+                        ofp.instruction.write_actions(
+                            actions=[
+                                ofp.action.group(group_id)]),
+                        ofp.instruction.goto_table(60)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=204)
+        logging.info("Inserting MPLS1 L2 Switch VPWS flow, label 0x%lX", label)
+        ctrl.message_send(request)
+
+    if send_barrier:
+        do_barrier(ctrl)
+
+    return request
+
 #dpctl tcp:192.168.1.1:6633 flow-mod table=28,cmd=add,prio=281 eth_type=0x800,ip_dst=100.0.0.1,ip_proto=6,tcp_dst=5000 write:set_field=ip_dst:10.0.0.1,set_field=tcp_dst:2000,group=0x71000001 goto:60
 def add_dnat_flow(ctrl, eth_type, ip_dst, ip_proto, tcp_dst, set_ip_dst, set_tcp_dst, action_group_id):
     match = ofp.match()
@@ -853,7 +1428,134 @@ def add_snat_flow(ctrl, eth_type, ip_src, ip_proto, tcp_src, set_ip_src, set_tcp
     logging.info("Inserting DNAT flow eth_type %lx, sip %lx, ip_proto %ld, tcp_src %ld, SetFeild: sip %lx, tcp_src %ld",eth_type, ip_src, ip_proto, tcp_src, set_ip_src, set_tcp_src)
     ctrl.message_send(request)
     return request
-    
+
+def add_egress_vlan_flow(ctrl, actset_output, vlan_id, set_vid_ovid, flag=EGRESS_VLAN_TABLE_FLAG_SWAP):
+    # EGRESS_VLAN_TABLE_FLAG_SWAP: match {actset_output, vid}, apply {set_vid}
+    # EGRESS_VLAN_TABLE_FLAG_SINGLE_TO_DOUBLE: match {actset_output, vid}, apply {push_vlan, set_vid}
+    # EGRESS_VLAN_TABLE_FLAG_DOUBLE_TO_SINGLE: match {actset_output, vid}, apply {pop_vlan, set_vid}, goto {211}
+
+    if (flag == EGRESS_VLAN_TABLE_FLAG_SWAP):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        request = ofp.message.flow_add(
+                table_id=210,
+                cookie=210,
+                match=match,
+                instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.set_field(ofp.oxm.vlan_vid(set_vid_ovid))
+                        ] )
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=210)
+        logging.info("Inserting egress vlan swap flow actset_output %d, vlan_id %d swap to %d", actset_output, vlan_id, set_vid_ovid)
+        ctrl.message_send(request)
+    if (flag == EGRESS_VLAN_TABLE_FLAG_SINGLE_TO_DOUBLE):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        request = ofp.message.flow_add(
+                table_id=210,
+                cookie=210,
+                match=match,
+                instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.push_vlan(0x8100),
+                            ofp.action.set_field(ofp.oxm.vlan_vid(set_vid_ovid))
+                        ] )
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=210)
+        logging.info("Inserting egress vlan s2d flow actset_output %d, vlan_id %d, outer vid %d", actset_output, vlan_id, set_vid_ovid)
+        ctrl.message_send(request)
+    if (flag == EGRESS_VLAN_TABLE_FLAG_DOUBLE_TO_SINGLE):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        request = ofp.message.flow_add(
+                table_id=210,
+                cookie=210,
+                match=match,
+                instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.pop_vlan(),
+                            ofp.action.set_field(ofp.oxm.exp2ByteValue(exp_type=10, value=set_vid_ovid))
+                        ] ),
+                    ofp.instruction.goto_table(211)
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=210)
+        logging.info("Inserting egress vlan d2s flow actset_output %d, vlan_id %d, set ovid %d", actset_output, vlan_id, set_vid_ovid)
+        ctrl.message_send(request)
+
+    return request
+
+def add_egress_vlan1_flow(ctrl, actset_output, vlan_id, ovid, set_vid, flag=EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE):
+    # EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE: match {actset_output, vid, ovid}
+    # EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE_SWAP: match {actset_output, vid, ovid}, apply {set_vid}
+    # EGRESS_VLAN1_TABLE_FLAG_SWAP_OUTER_VLAN: match {actset_output, vid, ovid}, apply {push_vlan, set_vid}
+
+    if (flag == EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=ovid))
+        request = ofp.message.flow_add(
+                table_id=211,
+                cookie=211,
+                match=match,
+                instructions=[
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=211)
+        logging.info("Inserting egress vlan1 d2s flow actset_output %d, vlan_id %d, ovid %d", actset_output, vlan_id, ovid)
+        ctrl.message_send(request)
+    if (flag == EGRESS_VLAN1_TABLE_FLAG_DOUBLE_TO_SINGLE_SWAP):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=ovid))
+        request = ofp.message.flow_add(
+                table_id=211,
+                cookie=211,
+                match=match,
+                instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.set_field(ofp.oxm.vlan_vid(set_vid))
+                        ] )
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=211)
+        logging.info("Inserting egress vlan1 flow actset_output %d, vlan_id %d -> %d, pop ovid %d", actset_output, vlan_id, set_vid, ovid)
+        ctrl.message_send(request)
+    if (flag == EGRESS_VLAN1_TABLE_FLAG_SWAP_OUTER_VLAN):
+        match = ofp.match()
+        match.oxm_list.append(ofp.oxm.exp4ByteValue(exp_type=42, value=actset_output))
+        match.oxm_list.append(ofp.oxm.vlan_vid(vlan_id))
+        match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=ovid))
+        request = ofp.message.flow_add(
+                table_id=211,
+                cookie=211,
+                match=match,
+                instructions=[
+                    ofp.instruction.apply_actions(
+                        actions=[
+                            ofp.action.push_vlan(0x8100),
+                            ofp.action.set_field(ofp.oxm.vlan_vid(set_vid))
+                        ] )
+                    ],
+                buffer_id=ofp.OFP_NO_BUFFER,
+                priority=211)
+        logging.info("Inserting egress vlan1 flow actset_output %d, vlan_id %d, ovid %d -> %d", actset_output, vlan_id, ovid, set_vid)
+        ctrl.message_send(request)
+
+    return request
+
 def get_vtap_lport_config_xml(dp_id, lport, phy_port, vlan, vnid, operation='merge'):  
     """
     Command Example:
@@ -1285,11 +1987,13 @@ def add_mpls_forwarding_group(ctrl, subtype, index, ref_gids,
 
     buckets=[]
     if subtype == OFDPA_MPLS_GROUP_SUBTYPE_FAST_FAILOVER_GROUP:
+        watch_port_idx=0
         group_type = ofp.OFPGT_FF
         for gid in ref_gids:
             action=[]
-            action.append(ofp.action.group(gid)) 
-            buckets.append(ofp.bucket(watch_port=watch_port, watch_group=watch_group,actions=action))
+            action.append(ofp.action.group(gid))
+            buckets.append(ofp.bucket(watch_port=watch_port[watch_port_idx], watch_group=watch_group,actions=action))
+            watch_port_idx+=1
 
     elif subtype == OFDPA_MPLS_GROUP_SUBTYPE_ECMP:
         group_type = ofp.OFPGT_SELECT
