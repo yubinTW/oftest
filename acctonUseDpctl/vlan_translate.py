@@ -208,3 +208,319 @@ class vlan_translate(base_tests.SimpleDataPlane):
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)        
+
+
+class egress_vlan_swap(base_tests.SimpleDataPlane):
+    """
+    [egress vlan swap]
+        xlate packet's tag
+
+    Inject  eth 1/3 Tag 200, SA000000000201, DA000000000200
+    Output  eth 1/1 Tag 3, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0xc80001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x10c8/0x1fff goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0xc80001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:set_field=vlan_vid=3
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0xc8000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x10c8/0x1fff goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0xc8000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:set_field=vlan_vid=3")
+
+        input_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=200,
+                                       dl_vlan_enable=True)
+        output_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=3,
+                                       dl_vlan_enable=True)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class egress_vlan_single2double(base_tests.SimpleDataPlane):
+    """
+    [egress vlan single to double]
+        add outer tag
+
+    Inject  eth 1/3 Tag 200, SA000000000201, DA000000000200
+    Output  eth 1/1 outer tag 5, inner tag 200, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0xc80001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x10c8/0x1fff goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0xc80001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:push_vlan=0x8100,set_field=vlan_vid=5
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0xc8000"+str(output_port)+" group=any,port=any,weight=0 pop_vlan,output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x10c8/0x1fff goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0xc8000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:push_vlan=0x8100,set_field=vlan_vid=5")
+
+        input_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=200,
+                                       dl_vlan_enable=True)
+        output_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class egress_vlan_double2single(base_tests.SimpleDataPlane):
+    """
+    [egress vlan double to single]
+        pop outer tag
+
+    Inject  eth 1/3 outer tag 5, inner tag 200, SA000000000201, DA000000000200
+    Output  eth 1/1 tag 200, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x50001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1000/0x1000 goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x50001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output=1,ofdpa_ovid=5,vlan_vid=200 apply:pop_vlan
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x5000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1000/0x1000 goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x5000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211")
+        apply_dpctl_mod(self, config, "flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output="+str(output_port)+",ofdpa_ovid=5,vlan_vid=200 apply:pop_vlan")
+
+        input_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+        output_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=200,
+                                       dl_vlan_enable=True)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class egress_vlan_double2single_swap(base_tests.SimpleDataPlane):
+    """
+    [egress vlan double to single and swap]
+        pop outer tag and swap inner tag
+
+    Inject  eth 1/3 outer tag 5, inner tag 200, SA000000000201, DA000000000200
+    Output  eth 1/1 tag 3, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x50001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1000/0x1000 goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x50001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output=1,ofdpa_ovid=5,vlan_vid=200 apply:set_field=vlan_vid=3
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x5000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1000/0x1000 goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x5000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211")
+        apply_dpctl_mod(self, config, "flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output="+str(output_port)+",ofdpa_ovid=5,vlan_vid=200 apply:set_field=vlan_vid=3")
+
+        input_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+        output_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       vlan_vid=3,
+                                       dl_vlan_enable=True)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class egress_vlan_swap_outer(base_tests.SimpleDataPlane):
+    """
+    [egress vlan swap outer]
+        swap outer tag
+
+    Inject  eth 1/3 outer tag 5, inner tag 200, SA 000000000201, DA 000000000200
+    Output  eth 1/1 outer tag 3, inner tag 200, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x50001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1000/0x1000 goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x50001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output=1,ofdpa_ovid=5,vlan_vid=200 apply:push_vlan=0x8100,set_field=vlan_vid=3
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x5000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1000/0x1000 goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x5000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211")
+        apply_dpctl_mod(self, config, "flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output="+str(output_port)+",ofdpa_ovid=5,vlan_vid=200 apply:push_vlan=0x8100,set_field=vlan_vid=3")
+
+        input_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+        output_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=3,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class egress_vlan_swap_inner(base_tests.SimpleDataPlane):
+    """
+    [egress vlan swap inner]
+        swap inner tag
+
+    Inject  eth 1/3 outer tag 5, inner tag 200, SA 000000000201, DA 000000000200
+    Output  eth 1/1 outer tag 5, inner tag 3, SA 000000000201, DA 000000000200
+
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x50001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1000/0x1000 goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x50001
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output=1,vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output=1,ofdpa_ovid=5,vlan_vid=200 apply:set_field=vlan_vid=3
+
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x5000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1000/0x1000 goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=60,cmd=add,prio=601 eth_dst=00:00:00:00:02:00,eth_type=0x800 write:group=0x5000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=210,cmd=add,prio=210 ofdpa_actset_output="+str(output_port)+",vlan_vid=200 apply:pop_vlan,set_field=ofdpa_ovid:5 goto:211")
+        apply_dpctl_mod(self, config, "flow-mod table=211,cmd=add,prio=211 ofdpa_actset_output="+str(output_port)+",ofdpa_ovid=5,vlan_vid=200 apply:set_field=vlan_vid=3")
+
+        input_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=200)
+        output_pkt = simple_tcp_packet_two_vlan(pktlen=104,
+                                       eth_dst='00:00:00:00:02:00',
+                                       eth_src='00:00:00:00:02:01',
+                                       ip_src='192.168.5.10',
+                                       ip_dst='192.168.3.2',
+                                       ip_ttl=64,
+                                       out_dl_vlan_enable=True,
+                                       out_vlan_vid=5,
+                                       in_dl_vlan_enable=True,
+                                       in_vlan_vid=3)
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
