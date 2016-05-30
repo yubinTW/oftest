@@ -307,7 +307,7 @@ class decap_2mpls(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x93000001 group=any,port=any,weight=0 set_field=mpls_label:0x903,push_mpls=0x8847,group=0x90000001")
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x91000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ofdpa_push_l2hdr,push_vlan=0x8100,push_mpls=0x8847,ofdpa_push_cw,group=0x93000001")
         apply_dpctl_mod(self, config, "flow-mod table=13,cmd=add,prio=113 tunn_id=0x10001,ofdpa_mpls_l2_port=100 write:group=0x91000001 goto:60")
-        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(output_port)+",vlan_vid=0x1003/0x1fff apply:set_field=ofdpa_mpls_l2_port:100,set_field=tunn_id:0x10001 goto:13")
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(output_port)+",vlan_vid=0x1002/0x1fff apply:set_field=ofdpa_mpls_l2_port:100,set_field=tunn_id:0x10001 goto:13")
         apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1002/0x1fff goto:20")
         apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 in_port="+str(input_port)+",vlan_vid=2/0xfff,eth_dst=00:00:04:22:33:55,eth_type=0x00008847 goto:24")
         apply_dpctl_mod(self, config, "flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24")
@@ -1002,7 +1002,7 @@ class decap_2mpls_l3(base_tests.SimpleDataPlane):
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
         apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x20000003 group=any,port=any,weight=0 set_field=eth_src=00:00:06:22:33:55,set_field=eth_dst=00:00:06:22:44:66,set_field=vlan_vid=2,group=0x2000"+str(output_port))
         apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1002/0x1fff apply:set_field=ofdpa_vrf:1 goto:20")
-        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:04:22:33:55,eth_type=0x8847 goto:24")
+        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:04:22:33:55,eth_type=0x8847 goto:23")
         apply_dpctl_mod(self, config, "flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24")
         apply_dpctl_mod(self, config, "flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1,ofdpa_mpls_data_first_nibble=4 apply:mpls_dec,pop_mpls=0x0800,set_field=ofdpa_vrf:1 goto:30")
         apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x0800,ip_dst=192.168.3.2/255.255.255.0,ofdpa_vrf=1 write:group=0x20000003 goto:60")
@@ -1082,6 +1082,119 @@ class encap_3mpls_l3(base_tests.SimpleDataPlane):
                 '20 00 f0 2c 00 00 44 44 44 44 44 44 44 44 44 44 '
                 '44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 '
                 '44 44 44 44 44 44 44 44 44 44 44 44')
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+
+class encap_2mpls_l3v6(base_tests.SimpleDataPlane):
+    """
+    [Encap two MPLS labels with L3]
+      Encap two MPLS labels with L3 routing
+
+    Inject  eth 1/3 Tag 2, SA000000112233, DA000000113355, SIP 2014::1, DIP 2014::03
+    Output  eth 1/1 SA000004223355, DA000004224466, Tag2, Outer Label 0x903, EXP 7, TTL 250, Inner Label 0x901, EXP 7, TTL 250; IP the same as original
+
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=0,cmd=add,prio=1 in_port=0/0xffff0000 goto:10
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1002/0x1fff goto:20
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=20,cmd=add,prio=201 in_port=3,vlan_vid=2/0xfff,eth_dst=00:00:00:11:33:55,eth_type=0x86dd goto:30
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x20001 group=any,port=any,weight=0 output=1
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x90000001 group=any,port=any,weight=0 set_field=eth_src=00:00:04:22:33:55,set_field=eth_dst=00:00:04:22:44:66,set_field=vlan_vid=2,group=0x20001
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x93000001 group=any,port=any,weight=0 set_field=mpls_label:0x903,push_mpls=0x8847,group=0x90000001
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x92000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ttl_out,group=0x93000001
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=30,cmd=add,prio=301 eth_type=0x86dd,ipv6_dst=2014::3/64 write:group=0x92000001 goto:60
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "flow-mod table=0,cmd=add,prio=1 in_port=0/0xffff0000 goto:10")
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1002/0x1fff goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 in_port="+str(input_port)+",vlan_vid=2/0xfff,eth_dst=00:00:00:11:33:55,eth_type=0x86dd goto:30")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x90000001 group=any,port=any,weight=0 set_field=eth_src=00:00:04:22:33:55,set_field=eth_dst=00:00:04:22:44:66,set_field=vlan_vid=2,group=0x2000"+str(output_port))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x93000001 group=any,port=any,weight=0 set_field=mpls_label:0x903,push_mpls=0x8847,group=0x90000001")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x92000001 group=any,port=any,weight=0 set_field=mpls_label:0x901,set_field=mpls_tc:7,set_field=ofdpa_mpls_ttl:250,ttl_out,group=0x93000001")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x86dd,ipv6_dst=2014::3/64 write:group=0x92000001 goto:60")
+
+        input_pkt = simple_packet(
+                '00 00 00 11 33 55 00 00 00 11 22 33 81 00 00 02 '
+                '86 dd 60 00 00 00 00 08 11 7f 20 14 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 02 20 14 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 01 00 0d 00 07 00 08 '
+                'bf 9f 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+
+        output_pkt = simple_packet(
+                '00 00 04 22 44 66 00 00 04 22 33 55 81 00 00 02 '
+                '88 47 00 90 3e fa 00 90 1f fa 60 00 00 00 00 08 '
+                '11 7e 20 14 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 02 20 14 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 01 00 0d 00 07 00 08 bf 9f 00 00 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00 00 00 00 00')
+
+        self.dataplane.send(input_port, str(input_pkt))
+        verify_packet(self, str(output_pkt), output_port)
+
+
+class decap_2mpls_l3v6(base_tests.SimpleDataPlane):
+    """
+    [Decap two MPLS labels with L3]
+      Decap two MPLS labels with L3 routing
+
+    Inject  eth 1/1 SA000000000033, DA000000113355, Tag2, Outer Label 0x903, EXP 7, TTL 250, Inner Label 0x901, SIP 2014::1, DIP 2014::03
+    Output  eth 1/3 SA000006223355, DA000006224466, Tag2, SIP 2014::1, DIP 2014::03
+
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x20003 group=any,port=any,weight=0 output=3
+    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x20000003 group=any,port=any,weight=0 set_field=eth_src=00:00:06:22:33:55,set_field=eth_dst=00:00:06:22:44:66,set_field=vlan_vid=2,group=0x20003
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=10,cmd=add,prio=101 in_port=1,vlan_vid=0x1002/0x1fff apply:set_field=ofdpa_vrf:1 goto:20
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:04:22:33:55,eth_type=0x8847 goto:24
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1,ofdpa_mpls_data_first_nibble=4 apply:mpls_dec,pop_mpls=0x0800,set_field=ofdpa_vrf:1 goto:30
+    ./dpctl tcp:192.168.1.1:6633 flow-mod table=30,cmd=add,prio=301 eth_type=0x86dd,ipv6_dst=2014::3/64,ofdpa_vrf=1 write:group=0x20000003 goto:60
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+
+        input_port = test_ports[0]
+        output_port = test_ports[1]
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x20000003 group=any,port=any,weight=0 set_field=eth_src=00:00:06:22:33:55,set_field=eth_dst=00:00:06:22:44:66,set_field=vlan_vid=2,group=0x2000"+str(output_port))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1002/0x1fff apply:set_field=ofdpa_vrf:1 goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:00:11:33:55,eth_type=0x8847 goto:24")
+        apply_dpctl_mod(self, config, "flow-mod table=23,cmd=add,prio=203 eth_type=0x8847,mpls_label=0x903 apply:pop_mpls=0x8847,mpls_dec goto:24")
+        apply_dpctl_mod(self, config, "flow-mod table=24,cmd=add,prio=204 eth_type=0x8847,mpls_label=0x901,mpls_bos=1,ofdpa_mpls_data_first_nibble=4 apply:mpls_dec,pop_mpls=0x0800,set_field=ofdpa_vrf:1 goto:30")
+        apply_dpctl_mod(self, config, "flow-mod table=30,cmd=add,prio=301 eth_type=0x86dd,ipv6_dst=2014::3/64,ofdpa_vrf=1 write:group=0x20000003 goto:60")
+
+        input_pkt = simple_packet(
+                '00 00 00 11 33 55 00 00 00 00 00 33 81 00 00 02 '
+                '88 47 00 90 30 40 00 90 11 40 60 00 00 00 00 2c '
+                '3a 40 20 14 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 01 20 14 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 03 80 00 a6 ca 00 01 00 01 31 32 33 34 35 36 '
+                '37 38 39 30 61 62 63 64 65 66 67 68 69 6a 6b 6c '
+                '6d 6e 6f 70 71 72 73 74 75 76 77 78 79 7a ')
+        output_pkt = simple_packet(
+                '00 00 06 22 44 66 00 00 06 22 33 55 81 00 00 02 '
+                '86 dd 60 00 00 00 00 2c 3a 3f 20 14 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 01 20 14 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 03 80 00 a6 ca 00 01 '
+                '00 01 31 32 33 34 35 36 37 38 39 30 61 62 63 64 '
+                '65 66 67 68 69 6a 6b 6c 6d 6e 6f 70 71 72 73 74 '
+                '75 76 77 78 79 7a')
 
         self.dataplane.send(input_port, str(input_pkt))
         verify_packet(self, str(output_pkt), output_port)
