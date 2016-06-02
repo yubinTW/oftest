@@ -63,6 +63,12 @@ class vxlan_a2n_ucast(base_tests.SimpleDataPlane):
         xml_before=get_edit_config(config["switch_ip"])
         #get datapath_id from feature message
         feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=False)
+        logging.info("config vtep udp-src-port entropy disabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
         #of-agent nexthop 1 destination 000000112233 ethernet 1/1 vid 2
         next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id,
                                                   dst_mac=dst_mac,
@@ -119,7 +125,7 @@ class vxlan_a2n_ucast(base_tests.SimpleDataPlane):
         output_pkt = simple_packet(
                 '00 00 00 11 22 33 70 72 cf c7 cd c7 81 00 00 02 '
                 '08 00 45 00 00 88 00 00 00 00 19 11 1a 12 c0 a8 '
-                '03 01 c0 a8 03 02 00 00 12 b5 00 74 00 00 08 00 '
+                '03 01 c0 a8 03 02 19 e9 12 b5 00 74 00 00 08 00 '
                 '00 00 00 00 01 00 00 00 00 22 44 77 00 00 00 33 '
                 '66 99 08 00 45 00 00 56 00 01 00 00 40 06 ef 44 '
                 'c0 a8 05 0a c0 a8 05 02 04 d2 00 50 00 00 00 00 '
@@ -143,7 +149,7 @@ class vxlan_a2n_ucast(base_tests.SimpleDataPlane):
         output_pkt = simple_packet(
                 '00 00 00 11 22 33 70 72 cf c7 cd c7 81 00 00 02 '
                 '08 00 45 00 00 84 00 01 00 00 19 11 1a 15 c0 a8 '
-                '03 01 c0 a8 03 02 00 00 12 b5 00 70 00 00 08 00 '
+                '03 01 c0 a8 03 02 19 e9 12 b5 00 70 00 00 08 00 '
                 '00 00 00 00 01 00 00 00 00 22 44 77 00 00 00 33 '
                 '44 55 08 00 45 00 00 52 00 01 00 00 40 06 ef 4e '
                 'c0 a8 05 04 c0 a8 05 02 04 d2 00 50 00 00 00 00 '
@@ -206,6 +212,12 @@ class vxlan_n2a_ucast(base_tests.SimpleDataPlane):
         xml_before=get_edit_config(config["switch_ip"])
         #get datapath_id from feature message
         feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=True)
+        logging.info("config vtep udp-src-port entropy enabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
         #of-agent nexthop 1 destination 000000112233 ethernet 1/1 vid 2
         next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id,
                                                   dst_mac=dst_mac,
@@ -330,6 +342,12 @@ class vxlan_a2n_mou(base_tests.SimpleDataPlane):
         xml_before=get_edit_config(config["switch_ip"])
         #get datapath_id from feature message
         feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=False)
+        logging.info("config vtep udp-src-port entropy disabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
         #of-agent nexthop 2 destination 01005e002233 ethernet 1/2 vid 3
         next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id_mcast,
                                                   dst_mac=dst_mac_mcast,
@@ -388,8 +406,8 @@ class vxlan_a2n_mou(base_tests.SimpleDataPlane):
 
         output_pkt = simple_packet(
                 '00 00 00 11 22 33 70 72 cf c7 cd c7 81 00 00 02 '
-                '08 00 45 00 00 88 00 01 00 00 19 11 1a 11 c0 a8 '
-                '03 01 c0 a8 03 02 00 00 12 b5 00 74 00 00 08 00 '
+                '08 00 45 00 00 88 00 00 00 00 19 11 1a 12 c0 a8 '
+                '03 01 c0 a8 03 02 19 e9 12 b5 00 74 00 00 08 00 '
                 '00 00 00 00 02 00 01 00 00 22 44 77 00 00 00 33 '
                 '44 55 08 00 45 00 00 56 00 01 00 00 40 06 ef 4d '
                 'c0 a8 05 01 c0 a8 05 02 04 d2 00 50 00 00 00 00 '
@@ -457,6 +475,12 @@ class vxlan_a2n_mom(base_tests.SimpleDataPlane):
         xml_before=get_edit_config(config["switch_ip"])
         #get datapath_id from feature message
         feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=False)
+        logging.info("config vtep udp-src-port entropy disabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
         #of-agent nexthop 2 destination 01005e000001 ethernet 1/1 vid 3
         next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id_mcast,
                                                   dst_mac=dst_mac_mcast,
@@ -515,7 +539,7 @@ class vxlan_a2n_mom(base_tests.SimpleDataPlane):
         output_pkt = simple_packet(
                 '01 00 5e 00 00 01 70 72 cf c7 cd c7 81 00 00 03 '
                 '08 00 45 00 00 64 00 00 00 00 19 11 fd de c0 a8 '
-                '03 01 e0 00 00 01 00 00 12 b5 00 50 00 00 08 00 '
+                '03 01 e0 00 00 01 19 e9 12 b5 00 50 00 00 08 00 '
                 '00 00 00 00 02 00 01 00 5e 64 01 01 00 00 00 00 '
                 '00 33 08 06 00 01 08 00 06 04 00 01 00 00 00 00 '
                 '00 aa c0 a8 c8 21 00 00 00 00 00 bb c0 a8 c8 01 '
@@ -577,6 +601,12 @@ class vxlan_dlf_n2a(base_tests.SimpleDataPlane):
         xml_before=get_edit_config(config["switch_ip"])
         #get datapath_id from feature message
         feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=True)
+        logging.info("config vtep udp-src-port entropy enabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
         #of-agent nexthop 2 destination 01005e002233 ethernet 1/1 vid 3
         next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id_mcast,
                                                   dst_mac=dst_mac_mcast,
