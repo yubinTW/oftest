@@ -1803,7 +1803,24 @@ def get_vni_config_xml(vni_id, mcast_ipv4, next_hop_id, operation='merge'):
     config_vni_xml=config_vni_xml.replace("VNID", str(vni_id))            
     config_vni_xml=config_vni_xml.replace("OPERATION", str(operation))	
     return config_vni_xml
-	
+
+def get_vtep_src_port_entropy_xml(entropy, operation='merge'):
+    #of-agent vtep udp-src-port entropy
+    vtep_src_port_entropy_xml="""
+      <config>
+          <of11-config:capable-switch xmlns:of11-config="urn:onf:of111:config:yang" xmlns:xc="urn:ietf:params:xml:ns:netconf:base:1.0">
+            <ofdpa10:udp-src-port-entropy xmlns:ofdpa10="urn:bcm:ofdpa10:accton01" xc:operation="OPERATION">STATUS</ofdpa10:udp-src-port-entropy>
+          </of11-config:capable-switch>
+      </config>
+      """
+
+    if entropy==True:
+        vtep_src_port_entropy_xml=vtep_src_port_entropy_xml.replace("STATUS", "true")
+    else:
+        vtep_src_port_entropy_xml=vtep_src_port_entropy_xml.replace("STATUS", "false")
+    vtep_src_port_entropy_xml=vtep_src_port_entropy_xml.replace("OPERATION", str(operation))
+    return vtep_src_port_entropy_xml
+
 def get_featureReplay(self):    
     req = ofp.message.features_request()
     res, raw = self.controller.transact(req)
