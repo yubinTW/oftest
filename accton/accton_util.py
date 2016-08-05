@@ -727,6 +727,12 @@ def add_vlan_table_flow_mpls(ctrl, ports, vlan_id=1, set_tunnel=2, set_mpls_port
     # VLAN_TABLE_FLAG_MPLS_ALL: match {port}, apply {set_tunnel, set_mpls_port}, goto {13}
     # VLAN_TABLE_FLAG_MPLS_TAG: match {port, vid}, apply {set_tunnel, set_mpls_port}, goto {13}
     # VLAN_TABLE_FLAG_MPLS_UNTAG: match {port, vid0/0x1000}, apply {set_tunnel, set_mpls_port, set_vid}, goto {13}
+
+    if( ((set_tunnel&0xffff0000)>>16) == 1 ):
+        goto_table_id=13
+    else:
+        goto_table_id=50
+
     msgs=[]
     for of_port in ports:
         if (flag == VLAN_TABLE_FLAG_MPLS_ALL):
@@ -743,10 +749,10 @@ def add_vlan_table_flow_mpls(ctrl, ports, vlan_id=1, set_tunnel=2, set_mpls_port
                       ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
                     ]
                   ),
-                  ofp.instruction.goto_table(13)
+                  ofp.instruction.goto_table(goto_table_id)
                 ],
                 priority=100)
-            logging.info("Add vlan mpls all on port %d and go to table 13" %(of_port))
+            logging.info("Add vlan mpls all on port %d and go to table %d" %(of_port, goto_table_id))
             ctrl.message_send(request)
             msgs.append(request)
 
@@ -765,10 +771,10 @@ def add_vlan_table_flow_mpls(ctrl, ports, vlan_id=1, set_tunnel=2, set_mpls_port
                       ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
                     ]
                   ),
-                  ofp.instruction.goto_table(13)
+                  ofp.instruction.goto_table(goto_table_id)
                 ],
                 priority=100)
-            logging.info("Add vlan %d mpls on port %d and go to table 13" %( vlan_id, of_port))
+            logging.info("Add vlan %d mpls on port %d and go to table %d" %( vlan_id, of_port, goto_table_id))
             ctrl.message_send(request)
             msgs.append(request)
 
@@ -788,10 +794,10 @@ def add_vlan_table_flow_mpls(ctrl, ports, vlan_id=1, set_tunnel=2, set_mpls_port
                       ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port))
                     ]
                   ),
-                  ofp.instruction.goto_table(13)
+                  ofp.instruction.goto_table(goto_table_id)
                 ],
                 priority=100)
-            logging.info("Add vlan mpls untag on port %d and go to table 13" %(of_port))
+            logging.info("Add vlan mpls untag on port %d and go to table %d" %(of_port, goto_table_id))
             ctrl.message_send(request)
             msgs.append(request)
 
@@ -885,9 +891,15 @@ def add_vlan1_table_flow(ctrl, ports, vlan_id=1, ovid=2, set_vid=6, set_vrf=Fals
             msgs.append(request)
 
         if (flag == VLAN1_TABLE_FLAG_MPLS):
+            if( ((set_tunnel_id&0xffff0000)>>16) == 1 ):
+                goto_table_id=13
+            else:
+                goto_table_id=50
+
             match = ofp.match()
             match.oxm_list.append(ofp.oxm.in_port(of_port))
             match.oxm_list.append(ofp.oxm.vlan_vid(0x1000+vlan_id))
+            match.oxm_list.append(ofp.oxm.exp2ByteValue(exp_type=10, value=0x1000+ovid))
             if set_vrf:
                 request = ofp.message.flow_add(
                     table_id=11,
@@ -908,24 +920,40 @@ def add_vlan1_table_flow(ctrl, ports, vlan_id=1, ovid=2, set_vid=6, set_vrf=Fals
                     ],
                     priority=100)
             else:
-                request = ofp.message.flow_add(
-                    table_id=11,
-                    cookie=42,
-                    match=match,
-                    instructions=[
-                      ofp.instruction.apply_actions(
-                        actions=[
-                          ofp.action.pop_vlan(),
-                          ofp.action.push_vlan(0x8100),
-                          ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
-                          ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_l2_port)),
-                          ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel_id))
-                        ]
-                      ),
-                      ofp.instruction.goto_table(13)
-                    ],
-                    priority=100)
-            logging.info("Add vlan %d mpls on port %d and go to table 13" %( vlan_id, of_port))
+                if set_vid != 0:
+                    request = ofp.message.flow_add(
+                        table_id=11,
+                        cookie=42,
+                        match=match,
+                        instructions=[
+                          ofp.instruction.apply_actions(
+                            actions=[
+                              ofp.action.pop_vlan(),
+                              ofp.action.push_vlan(0x8100),
+                              ofp.action.set_field(ofp.oxm.vlan_vid(set_vid)),
+                              ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_l2_port)),
+                              ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel_id))
+                            ]
+                          ),
+                          ofp.instruction.goto_table(goto_table_id)
+                        ],
+                        priority=100)
+                else:
+                    request = ofp.message.flow_add(
+                        table_id=11,
+                        cookie=42,
+                        match=match,
+                        instructions=[
+                          ofp.instruction.apply_actions(
+                            actions=[
+                              ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_l2_port)),
+                              ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel_id))
+                            ]
+                          ),
+                          ofp.instruction.goto_table(goto_table_id)
+                        ],
+                        priority=100)
+            logging.info("Add vlan %d mpls on port %d and go to table %d" %( vlan_id, of_port, goto_table_id))
             ctrl.message_send(request)
             msgs.append(request)
 
@@ -1032,12 +1060,17 @@ def add_unicast_routing_flow(ctrl, eth_type, dst_ip, mask, action_group_id, vrf=
     match.oxm_list.append(ofp.oxm.eth_type(eth_type))
     if vrf != 0:
         match.oxm_list.append(ofp.oxm.exp2ByteValue(ofp.oxm.OFDPA_EXP_TYPE_VRF, vrf))
-    
-    if mask!=0:
-        match.oxm_list.append(ofp.oxm.ipv4_dst_masked(dst_ip, mask))
-    else:
-        match.oxm_list.append(ofp.oxm.ipv4_dst(dst_ip))
 
+    if eth_type == 0x800 :
+        if mask!=0:
+            match.oxm_list.append(ofp.oxm.ipv4_dst_masked(dst_ip, mask))
+        else:
+            match.oxm_list.append(ofp.oxm.ipv4_dst(dst_ip))
+    else:
+        if mask!=0:
+            match.oxm_list.append(ofp.oxm.ipv6_dst_masked(dst_ip, mask))
+        else:
+            match.oxm_list.append(ofp.oxm.ipv6_dst(parse_ipv6(dst_ip)))
 
     request = ofp.message.flow_add(
             table_id=30,
@@ -1991,11 +2024,41 @@ def add_mpls_label_group(ctrl, subtype, index, ref_gid,
     ctrl.message_send(request)
     
     return mpls_group_id, request    
-    
+
+def add_mpls_vpls_port_group(ctrl, ref_gid, set_tunnel, set_mpls_port, group_id):
+    action=[]
+    action.append(ofp.action.set_field(ofp.oxm.tunnel_id(set_tunnel)))
+    action.append(ofp.action.set_field(ofp.oxm.exp4ByteValue(exp_type=8, value=set_mpls_port)))
+    action.append(ofp.action.group(ref_gid))
+
+    buckets = [ofp.bucket(actions=action)]
+    mpls_group_id = group_id
+    request = ofp.message.group_add(group_type=ofp.OFPGT_INDIRECT,
+                                    group_id=group_id,
+                                    buckets=buckets
+                                   )
+    ctrl.message_send(request)
+    return mpls_group_id, request
+
+def add_mpls_vpls_mcast_group(ctrl, ref_gids, group_id):
+    buckets=[]
+    for gid in ref_gids:
+        action=[]
+        action.append(ofp.action.group(gid))
+        buckets.append(ofp.bucket(watch_port=ofp.OFPP_ANY, watch_group=ofp.OFPG_ANY,actions=action))
+
+    mpls_group_id = group_id
+    request = ofp.message.group_add(group_type=ofp.OFPGT_ALL,
+                                    group_id=group_id,
+                                    buckets=buckets
+                                   )
+    ctrl.message_send(request)
+    return mpls_group_id, request
+
 def add_mpls_forwarding_group(ctrl, subtype, index, ref_gids, 
                               watch_port=None, 
-							  watch_group=ofp.OFPP_ANY, 
-							  push_vlan=None,
+                              watch_group=ofp.OFPG_ANY,
+                              push_vlan=None,
                               pop_vlan=None,
                               set_vid=None):
     assert(subtype == OFDPA_MPLS_GROUP_SUBTYPE_FAST_FAILOVER_GROUP
