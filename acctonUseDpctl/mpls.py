@@ -1687,10 +1687,6 @@ class encap_2mpls_vpls_p2p_ff(base_tests.SimpleDataPlane):
 
     ./dpctl tcp:0.0.0.0:6633 flow-mod table=50,cmd=add,prio=501 tunn_id=0x20001,eth_dst=00:00:00:11:33:55 write:group=0x9C000001 goto:60
 
-
-    # fake duplicate customer setting
-    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x20001 group=any,port=any,weight=0 output=1
-    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x9D000001 group=any,port=any,weight=0 set_field=ofdpa_mpls_l2_port:0x10001,set_field=tunn_id:0x20001,group=0x20001
     """
     def runTest(self):
         delete_all_flows(self.controller)
@@ -1770,7 +1766,7 @@ class encap_2mpls_vpls_p2p_ff(base_tests.SimpleDataPlane):
 
 class decap_2mpls_vpls_p2p(base_tests.SimpleDataPlane):
     """
-    [Encap two MPLS labels: provider to customer]
+    [Decap two MPLS labels: provider to customer]
 
     ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x20002 group=any,port=any,weight=0 output=2
     ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x90000002 group=any,port=any,weight=0 set_field=eth_src=00:00:04:22:33:51,set_field=eth_dst=00:00:04:22:44:61,set_field=vlan_vid=2,group=0x20002
