@@ -118,15 +118,18 @@ class l3mcast_route(base_tests.SimpleDataPlane):
     [L3 multicast route]
       Do multicast route and output to specified ports
 
-    Inject  eth 1/3 Tag2, SA000000112233, DA01005E404477, SIP 192.168.3.2, DIP 224.0.2.2
-    Output  eth 1/1 original
+    Inject  eth 1/1 Tag2, SA000000112233, DA01005E404477, SIP 192.168.3.100, DIP 224.0.2.2
+    Output  eth 1/2 Tag2, SA000000112233, DA01005E404477, SIP 192.168.3.100, DIP 224.0.2.2
+    Output  eth 1/3 Tag6, SA000000336699, DA01005E404477, SIP 192.168.3.100, DIP 224.0.2.2
 
-    ./dpctl tcp:192.168.1.1:6633 flow-mod table=0,cmd=add,prio=1 in_port=0/0xffff0000 goto:10
-    ./dpctl tcp:192.168.1.1:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1002/0x1fff goto:20
-    ./dpctl tcp:192.168.1.1:6633 flow-mod table=20,cmd=add,prio=201 eth_dst=01:00:5e:40:44:77/ff:ff:ff:80:00:00,eth_type=0x0800 goto:40
-    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=ind,group=0x20001 group=any,port=any,weight=0 output=1
-    ./dpctl tcp:192.168.1.1:6633 group-mod cmd=add,type=all,group=0x60020001 group=any,port=any,weight=0 group=0x20001
-    ./dpctl tcp:192.168.1.1:6633 flow-mod table=40,cmd=add,prio=401 eth_type=0x0800,ip_src=192.168.2.2,ip_dst=224.0.2.2,vlan_vid=2 write:group=0x60020001 goto:60
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=0,cmd=add,prio=1 in_port=0/0xffff0000 goto:10
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=10,cmd=add,prio=101 in_port=3,vlan_vid=0x1002/0x1fff goto:20
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=20,cmd=add,prio=201 eth_dst=01:00:5e:40:44:77/ff:ff:ff:80:00:00,eth_type=0x0800 goto:40
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x20002 group=any,port=any,weight=0 output=2
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x60003 group=any,port=any,weight=0 output=3
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=ind,group=0x50000002 group=any,port=any,weight=0 set_field=eth_src=00:00:00:33:66:99,set_field=vlan_vid=6,group=0x60003
+    ./dpctl tcp:0.0.0.0:6633 group-mod cmd=add,type=all,group=0x60020001 group=any,port=any,weight=0 group=0x20002 group=any,port=any,weight=0 group=0x50000002
+    ./dpctl tcp:0.0.0.0:6633 flow-mod table=40,cmd=add,prio=401 eth_type=0x0800,ip_src=192.168.3.100,ip_dst=224.0.2.2,vlan_vid=2 write:group=0x60020001 goto:60
     """
     def runTest(self):
         delete_all_flows(self.controller)
@@ -135,34 +138,42 @@ class l3mcast_route(base_tests.SimpleDataPlane):
         test_ports = sorted(config["port_map"].keys())
 
         input_port = test_ports[0]
-        output_port = test_ports[1]
+        output_port1 = test_ports[1]
+        output_port2 = test_ports[2]
 
         apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
         apply_dpctl_mod(self, config, "flow-mod table=0,cmd=add,prio=1 in_port=0/0xffff0000 goto:10")
         apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(input_port)+",vlan_vid=0x1002/0x1fff goto:20")
         apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 eth_dst=01:00:5e:40:44:77/ff:ff:ff:80:00:00,eth_type=0x0800 goto:40")
-        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port)+" group=any,port=any,weight=0 output="+str(output_port))
-        apply_dpctl_mod(self, config, "group-mod cmd=add,type=all,group=0x60020001 group=any,port=any,weight=0 group=0x2000"+str(output_port))
-        apply_dpctl_mod(self, config, "flow-mod table=40,cmd=add,prio=401 eth_type=0x0800,ip_src=192.168.3.2,ip_dst=224.0.2.2,vlan_vid=2 write:group=0x60020001 goto:60")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(output_port1)+" group=any,port=any,weight=0 output="+str(output_port1))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x6000"+str(output_port2)+" group=any,port=any,weight=0 output="+str(output_port2))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x50000002 group=any,port=any,weight=0 set_field=eth_src=00:00:00:33:66:99,set_field=vlan_vid=6,group=0x6000"+str(output_port2))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=all,group=0x60020001 group=any,port=any,weight=0 group=0x2000"+str(output_port1)+" group=any,port=any,weight=0 group=0x50000002")
+        apply_dpctl_mod(self, config, "flow-mod table=40,cmd=add,prio=401 eth_type=0x0800,ip_src=192.168.3.100,ip_dst=224.0.2.2,vlan_vid=2 write:group=0x60020001 goto:60")
 
-        input_pkt = simple_packet(
-                '01 00 5e 40 44 77 00 00 00 11 22 33 81 00 00 02 '
-                '08 00 45 00 00 4e 04 d2 00 00 7f 84 91 ad c0 a8 '
-                '03 02 e0 00 02 02 00 17 00 08 00 01 f7 fa 00 00 '
-                '00 00 50 00 04 00 0e 79 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+        input_pkt = simple_tcp_packet(pktlen=100,
+                                       eth_dst='01:00:5e:40:44:77',
+                                       eth_src='00:00:00:11:22:33',
+                                       ip_src='192.168.3.100',
+                                       ip_dst='224.0.2.2',
+                                       ip_ttl=64,
+                                       vlan_vid=2,
+                                       dl_vlan_enable=True)
 
-        output_pkt = simple_packet(
-                '01 00 5e 40 44 77 00 00 00 11 22 33 81 00 00 02 '
-                '08 00 45 00 00 4e 04 d2 00 00 7f 84 91 ad c0 a8 '
-                '03 02 e0 00 02 02 00 17 00 08 00 01 f7 fa 00 00 '
-                '00 00 50 00 04 00 0e 79 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
-                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+        output_pkt1 = input_pkt
+
+        output_pkt2 = simple_tcp_packet(pktlen=100,
+                                       eth_dst='01:00:5e:40:44:77',
+                                       eth_src='00:00:00:33:66:99',
+                                       ip_src='192.168.3.100',
+                                       ip_dst='224.0.2.2',
+                                       ip_ttl=63,
+                                       vlan_vid=6,
+                                       dl_vlan_enable=True)
 
         self.dataplane.send(input_port, str(input_pkt))
-        verify_packet(self, str(output_pkt), output_port)
+        verify_packet(self, str(output_pkt1), output_port1)
+        verify_packet(self, str(output_pkt2), output_port2)
 
 class l3mcast_route2(base_tests.SimpleDataPlane):
     """
