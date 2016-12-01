@@ -680,3 +680,177 @@ class vxlan_dlf_n2a(base_tests.SimpleDataPlane):
         verify_packet(self, str(output_pkt), access_phy_port)
 
 
+class vxlan_dlf_n2a_fom(base_tests.SimpleDataPlane):
+    """
+    add match tunnel & not match DA (DLF), action group subtype 1
+
+    => Inject tag 2 pkt with outer DA 01005e002233, SIP 192.168.3.2, DIP 224.0.0.1, inner DA 010000224477 vxlan 2 to port 1/1
+    ==> output from port 1/4 without tag, DA 010000224477
+    ==> output from port 1/2 with tag 2, DA 010000224477
+
+    => Inject tag 2 pkt with outer DA 000000000011, SIP 192.168.5.2, DIP 192.168.5.1, inner DA 000000224478 vxlan 2 to port 1/1
+    ==> output from port 1/4 without tag, DA 000000224478
+    ==> output from port 1/2 with tag 2, DA 000000224478
+
+    of-agent nexthop 1 destination 000000112233 ethernet 1/1 vid 2
+    of-agent nexthop 2 destination 01005e002233 ethernet 1/3 vid 3
+    of-agent vni 2 multicast 224.0.0.1 nexthop 2
+    of-agent vtep 10001 source 192.168.5.1 destination  192.168.5.2 udp-src-port 65535 nexthop 1
+    of-agent vtap 10102 ethernet 1/2 vid 2
+    of-agent vtap 10104 ethernet 1/4
+    of-agent vtp 10001 vni 2
+    of-agent vtp 10102 vni 2
+    of-agent vtp 10104 vni 2
+
+    dpctl tcp:192.168.2.1:6633 flow-mod table=0,cmd=add,prio=1 in_port=0x10000/0xffff0000 goto:50
+    dpctl tcp:192.168.2.1:6633 group-mod cmd=add,type=ind,group=0x20001 group=any,port=any,weight=0 output=1
+    dpctl tcp:192.168.2.1:6633 group-mod cmd=add,type=ind,group=0x30002 group=any,port=any,weight=0 output=2
+    dpctl tcp:192.168.2.1:6633 flow-mod table=10,cmd=add,prio=101 in_port=1,vlan_vid=0x1002/0x0001fff goto:20
+    dpctl tcp:192.168.2.1:6633 flow-mod table=10,cmd=add,prio=101 in_port=2,vlan_vid=0x1003/0x0001fff goto:20
+    dpctl tcp:192.168.2.1:6633 group-mod cmd=add,type=all,group=0x80002401 group=any,port=any,weight=0 output=0x10104 group=any,port=any,weight=0 output=0x10102 group=any,port=any,weight=0 output=0x10001
+    dpctl tcp:192.168.2.1:6633 flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:00:00:00:11,eth_type=0x00000800 goto:30
+    dpctl tcp:192.168.2.1:6633 flow-mod table=20,cmd=add,prio=201 eth_dst=01:00:5e:00:22:33/ff:ff:ff:80:00:00,eth_type=0x00000800 goto:40
+    dpctl tcp:192.168.2.1:6633 flow-mod table=50,cmd=add,prio=501 tunn_id=2 write:group=0x80002401 goto:60
+    """
+    def runTest(self):
+        delete_all_flows(self.controller)
+        delete_all_groups(self.controller)
+
+        test_ports = sorted(config["port_map"].keys())
+        network_phy_port1 = test_ports[0] #1
+        access_phy_port2 = test_ports[1] #2
+        access_phy_port4 = test_ports[2] #4
+
+        if config["switch_ip"] == None:
+            logging.error("Doesn't configure switch IP")
+            return
+
+        #paramaters
+        access_port2_vid=2
+        access_port4_vid=0
+        access_lport2=0x10102
+        access_lport4=0x10104
+        network_phy_port=2
+        next_hop_port=3
+        vnid=2
+        next_hop_id=1
+        next_hop_id_mcast=2
+        dst_mac="00:00:00:11:22:33"
+        mcast_ipv4="224.0.0.1"
+        dst_mac_mcast="01:00:5e:00:22:33"
+        network_lport=0x10001
+        vni_vlan=3
+        network_port_vlan=2
+        network_port_sip="192.168.5.1"
+        network_port_dip="192.168.5.2"
+
+        xml_before=get_edit_config(config["switch_ip"])
+        #get datapath_id from feature message
+        feature_reply=get_featureReplay(self)
+
+        #no of-agent vtep udp-src-port entropy
+        vtep_src_port_entropy_xml=get_vtep_src_port_entropy_xml(entropy=True)
+        logging.info("config vtep udp-src-port entropy enabled");
+        assert(send_edit_config(config["switch_ip"], vtep_src_port_entropy_xml) == True)
+
+        #of-agent nexthop 2 destination 01005e002233 ethernet 1/3 vid 3
+        next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id_mcast,
+                                                  dst_mac=dst_mac_mcast,
+                                                  phy_port=next_hop_port,
+                                                  vlan=vni_vlan)
+        logging.info("config NextHop %d, DST_MAC %s, PHY %d, VLAN %d", next_hop_id_mcast, dst_mac_mcast, next_hop_port, vni_vlan);
+        assert(send_edit_config(config["switch_ip"], next_hop_conf_xml) == True)
+
+        #of-agent nexthop 1 destination 000000112233 ethernet 1/1 vid 2
+        next_hop_conf_xml=get_next_hop_config_xml(next_hop_id=next_hop_id,
+                                                  dst_mac=dst_mac,
+                                                  phy_port=network_phy_port1,
+                                                  vlan=network_port_vlan)
+        logging.info("config NextHop %d, DST_MAC %s, PHY %d, VLAN %d", next_hop_id, dst_mac, network_phy_port1, network_port_vlan);
+        assert(send_edit_config(config["switch_ip"], next_hop_conf_xml) == True)
+
+        #of-agent vni 2 multicast 224.0.0.1 nexthop 2
+        vni_config_xml=get_vni_config_xml(vni_id=vnid,
+                                          mcast_ipv4=mcast_ipv4,
+                                          next_hop_id=next_hop_id_mcast)
+        logging.info("config VNI %lx", vnid);
+        assert(send_edit_config(config["switch_ip"], vni_config_xml) == True)
+
+        #of-agent vtap 10102 ethernet 1/2 vid 2
+        #of-agent vtp 10102 vni 2
+        vtap_conf_xml=get_vtap_lport_config_xml(dp_id=feature_reply.datapath_id,
+                                        lport=access_lport2, phy_port=access_phy_port2,
+                                        vlan=access_port2_vid, vnid=vnid)
+        logging.info("config VTAP 0x%lx, PHY %d, VID %d, VNID %lx", access_lport2, access_phy_port2, access_port2_vid, vnid);
+        assert(send_edit_config(config["switch_ip"], vtap_conf_xml) == True)
+
+        #of-agent vtap 10104 ethernet 1/4
+        #of-agent vtp 10104 vni 2
+        vtap_conf_xml=get_vtap_lport_config_xml(dp_id=feature_reply.datapath_id,
+                                        lport=access_lport4, phy_port=access_phy_port4,
+                                        vlan=access_port4_vid, vnid=vnid)
+        logging.info("config VTAP 0x%lx, PHY %d, VID %d, VNID %lx", access_lport4, access_phy_port4, access_port4_vid, vnid);
+        assert(send_edit_config(config["switch_ip"], vtap_conf_xml) == True)
+
+        #of-agent vtep 10001 source 192.168.5.1 destination 192.168.5.2 udp-src-port 65535 nexthop 1
+        #of-agent vtp 10001 vni 2
+        vtep_conf_xml=get_vtep_lport_config_xml(dp_id=feature_reply.datapath_id,
+                                                lport=network_lport,
+                                                src_ip=network_port_sip, dst_ip=network_port_dip,
+                                                next_hop_id=next_hop_id,
+                                                vnid=vnid)
+        logging.info("config VTEP 0x%lx, SRC_IP %s, DST_IP %s, NEXTHOP_ID %d", network_lport, network_port_sip, network_port_dip, next_hop_id);
+        assert(send_edit_config(config["switch_ip"], vtep_conf_xml) == True)
+
+        apply_dpctl_mod(self, config, "meter-mod cmd=del,meter=0xffffffff")
+        apply_dpctl_mod(self, config, "flow-mod table=0,cmd=add,prio=1 in_port=0x10000/0xffff0000 goto:50")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x2000"+str(network_phy_port1)+" group=any,port=any,weight=0 output="+str(network_phy_port1))
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=ind,group=0x3000"+str(access_phy_port2)+" group=any,port=any,weight=0 output="+str(access_phy_port2))
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(network_phy_port1)+",vlan_vid=0x1002/0x1fff goto:20")
+        apply_dpctl_mod(self, config, "flow-mod table=10,cmd=add,prio=101 in_port="+str(access_phy_port2)+",vlan_vid=0x1003/0x1fff goto:20")
+        apply_dpctl_mod(self, config, "group-mod cmd=add,type=all,group=0x80002401 group=any,port=any,weight=0 output=0x10104 group=any,port=any,weight=0 output=0x10102 group=any,port=any,weight=0 output=0x10001")
+        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 vlan_vid=2/0xfff,eth_dst=00:00:00:00:00:11,eth_type=0x800 goto:30")
+        apply_dpctl_mod(self, config, "flow-mod table=20,cmd=add,prio=201 eth_dst=01:00:5e:00:22:33/ff:ff:ff:80:00:00,eth_type=0x800 goto:40")
+        apply_dpctl_mod(self, config, "flow-mod table=50,cmd=add,prio=501 tunn_id=2 write:group=0x80002401 goto:60")
+
+        input_pkt = simple_packet(
+                '00 00 00 00 00 11 00 00 00 00 00 22 81 00 00 02 '
+                '08 00 45 00 00 60 04 d2 00 00 7f 11 ab 67 c0 a8 '
+                '05 02 c0 a8 05 01 00 3f 12 b5 00 4c 3c b1 08 00 '
+                '00 00 00 00 02 00 00 00 00 22 44 78 00 00 00 00 '
+                '11 22 33 00 00 01 02 03 04 05 06 07 08 09 80 81 '
+                '82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 '
+                '98 99 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00 00 00')
+
+        output_pkt2 = simple_packet(
+                '00 00 00 22 44 78 00 00 00 00 11 22 81 00 00 02 '
+                '33 00 00 01 02 03 04 05 06 07 08 09 80 81 82 83 '
+                '84 85 86 87 88 89 90 91 92 93 94 95 96 97 98 99 '
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00')
+
+        output_pkt4 = simple_packet(
+                '00 00 00 22 44 78 00 00 00 00 11 22 33 00 00 01 '
+                '02 03 04 05 06 07 08 09 80 81 82 83 84 85 86 87 '
+                '88 89 90 91 92 93 94 95 96 97 98 99 00 00 00 00 '
+                '00 00 00 00 00 00 00 00 00 00 00 00 00 00 00 00')
+
+        self.dataplane.send(network_phy_port1, str(input_pkt))
+        verify_packet(self, str(output_pkt2), access_phy_port2)
+        verify_packet(self, str(output_pkt4), access_phy_port4)
+
+        input_pkt = simple_packet(
+                '01 00 5e 00 22 33 00 00 00 00 00 22 81 00 00 02 '
+                '08 00 45 00 00 60 04 d2 00 00 7f 11 91 0f c0 a8 '
+                '05 02 e0 00 00 01 00 3f 12 b5 00 4c 22 59 08 00 '
+                '00 00 00 00 02 00 00 00 00 22 44 78 00 00 00 00 '
+                '11 22 33 00 00 01 02 03 04 05 06 07 08 09 80 81 '
+                '82 83 84 85 86 87 88 89 90 91 92 93 94 95 96 97 '
+                '98 99 00 00 00 00 00 00 00 00 00 00 00 00 00 00 '
+                '00 00 00 00 00 00')
+
+        self.dataplane.send(network_phy_port1, str(input_pkt))
+        verify_packet(self, str(output_pkt2), access_phy_port2)
+        verify_packet(self, str(output_pkt4), access_phy_port4)
+
