@@ -33,6 +33,8 @@ class SimpleProtocol(BaseTest):
 
     def setUp(self):
         BaseTest.setUp(self)
+        if config["mars"]:
+          return
 
         self.controller = controller.Controller(
             switch=config["switch_ip"],
@@ -86,6 +88,10 @@ class SimpleProtocol(BaseTest):
         self.supported_actions = parent.supported_actions
         
     def tearDown(self):
+        if config["mars"]:
+          BaseTest.tearDown(self)
+          return
+
         self.controller.shutdown()
         self.controller.join()
         del self.controller
