@@ -31,11 +31,11 @@ class AccountGetTest(base_tests.SimpleDataPlane):
      response = requests.get(URL+"useraccount/v1", headers=GET_HEADER)
      assert(response.status_code == 200)
      #print response.json()
-     
+
      response = requests.get(URL+"useraccount/v1/group/admingroup", headers=GET_HEADER)
      assert(response.status_code == 200)
      #print response.json()['users']
-     
+
      payload='{"user_name": "testUser",  "groups": ["admingroup" ], "password": "testPassword"}'
      response = requests.post(URL+"useraccount/v1", headers=POST_HEADER, data=payload)
      assert(response.status_code == 200)
