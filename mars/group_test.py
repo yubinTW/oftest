@@ -154,7 +154,12 @@ class GroupTest_Flood(base_tests.SimpleDataPlane):
                   {
                     "type": "GROUP",
                     "groupId": "0x10001"
-                  },
+                  }
+                ]
+              },
+              {
+              "treatment": {
+                "instructions": [
                   {
                     "type": "GROUP",
                     "groupId": "0x10002"
@@ -268,13 +273,18 @@ class GroupTest_multicast(base_tests.SimpleDataPlane):
                   {
                     "type": "GROUP",
                     "groupId": "0x10001"
-                  },
+                  }                 
+                ]
+              },
+            {
+              "treatment": {
+                "instructions": [
                   {
                     "type": "GROUP",
                     "groupId": "0x10002"
                   }                  
                 ]
-              }
+              }              
             }
           ]
         }
