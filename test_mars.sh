@@ -13,6 +13,8 @@ else
   echo "install scapy"
   sudo apt-get install -y scapy
 fi
+# install python dependencies
+pip2 install -r requirements.txt
 
 echo "Start testing `date +%Y/%m/%d-%H:%M:%S`"
 
