@@ -14,7 +14,7 @@ else
   sudo apt-get install -y scapy
 fi
 # install python dependencies
-pip2 install -r requirements.txt
+pip2 install --user -r requirements.txt
 
 echo "Start testing `date +%Y/%m/%d-%H:%M:%S`"
 
