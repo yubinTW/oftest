@@ -1,3 +1,6 @@
 *.pyc
 profiles/*.pyc
 *~
+.vscode
+oft.log
+oft.pcap
