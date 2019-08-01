@@ -192,3 +192,45 @@ class QosSchedulerTest(base_tests.SimpleDataPlane):
             if item['name'] == 'bandwidth':
                 assert item['queue_weight'] == [1,2,3,4,5,6,7,8]
                 break
+
+
+class QosRatelimitTest(base_tests.SimpleDataPlane):
+    """
+    Test Qos Ratelimit API.
+        - GET qos/ratelimit/v1
+        - GET qos/ratelimit/v1/<queue_no>
+        - POST qos/ratelimit/v1
+        - DELETE qos/ratelimit/v1/<queue_no>
+    """
+    def runTest(self):
+
+        # Query all Ratelimit data
+        response = requests.get(URL+'qos/ratelimit/v1', headers=GET_HEADER)
+        assert response.status_code == 200, 'Query all Ratelimit data FAIL'
+
+        # Set a ratelimit on queue
+        qno = random.randrange(0,8,1)
+        payload = {
+            "queue": qno,
+            "min_rate": 20,
+            "max_rate": 80
+        }
+        response = requests.post(URL+'qos/ratelimit/v1', headers=POST_HEADER, json=payload)
+        assert response.status_code == 200, 'Set a ratelimit on queue_no:'+str(qno)+' FAIL'
+
+        # Check if set successfully
+        response = requests.get(URL+'qos/ratelimit/v1/'+str(qno), headers=GET_HEADER)
+        assert response.status_code == 200, 'Query ratelimit on queue_no:'+str(qno)+' FAIL'
+        assert len(response.json()) > 0, 'Set a ratelimit on queue_no:'+str(qno)+' FAIL'
+        rl = response.json()
+        assert rl['queue'] == qno, 'Set a ratelimit on queue_no:'+str(qno)+' FAIL'
+        assert rl['min_rate'] == 20 and rl['max_rate'] == 80 , 'Set a ratelimit on queue_no:'+str(qno)+' FAIL'
+
+        # Delete ratelimit
+        response = requests.delete(URL+'qos/ratelimit/v1/'+str(qno), headers=GET_HEADER)
+        assert response.status_code == 200, 'Delete ratelimit on queue_no:'+str(qno)+' FAIL'
+
+        # Check if delete successfully
+        response = requests.get(URL+'qos/ratelimit/v1/'+str(qno), headers=GET_HEADER)
+        assert response.status_code == 200, 'Query ratelimit on queue_no:'+str(qno)+' FAIL'
+        assert len(response.json()) == 0, 'Delete ratelimit on queue_no:'+str(qno)+' FAIL'
