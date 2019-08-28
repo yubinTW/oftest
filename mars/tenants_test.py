@@ -189,18 +189,25 @@ class LargeScaleTest(base_tests.SimpleDataPlane):
             'name':  tenant_name,
             'type': 'Normal'
         }
+        # add tenant
         response = requests.post(URL+"v1/tenants/v1", headers=POST_HEADER, json=payload)
         assert response.status_code == 200, 'Add a tenant FAIL! '+ response.text
         # add segment
         for i in range(4000):
-            segment_name = 'test_segment_+'+str(i)
+            segment_name = 'test_segment_'+str(i)
             payload = {
                 "name": segment_name,
                 "type": "vlan",
                 "ip_address": [
                     "192.168.2.1"
                 ],
-                "value": i
+                "value": 10000+i
             }
             response = requests.post(URL+'v1/tenants/v1/{}/segments'.format(tenant_name), json=payload, headers=POST_HEADER)
             assert response.status_code == 200, 'Add segment FAIL! ' + response.text
+            # delete segment
+            response = requests.delete(URL+'v1/tenants/v1/{}/segments/{}'.format(tenant_name, segment_name), headers=GET_HEADER)
+            assert response.status_code == 200, 'Delete segment FAIL!'
+        # delete tenant
+        response = requests.delete(URL + 'v1/tenants/v1/{}'.format(tenant_name), headers=GET_HEADER)
+        assert response.status_code == 200, 'Delete tenant FAIL!' + response.text
