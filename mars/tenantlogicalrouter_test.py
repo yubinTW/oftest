@@ -146,20 +146,3 @@ class TenantLogicalRouterAddNewTest(base_tests.SimpleDataPlane):
             if item['name'] == tenant_name:
                 removed = False
         assert(removed)
-
-
-class TenantLogicalRouterNotExistTest(base_tests.SimpleDataPlane):
-    """
-    Test not exist data
-    """
-    # add new tenantlogicalrouter on not exist tenant
-    payload = {
-        "name": "tenantlogicalrouter01"
-    }
-    response = requests.post(URL+"tenantlogicalrouter/v1/tenants/testTenantNotExist999/", headers=POST_HEADER, json=payload)
-    assert(response.status_code == 400)
-
-    # list tenantlogicalrouters which tenant is not exist
-    response = requests.get(URL+"tenantlogicalrouter/v1/tenants/testTenantNotExist999/", headers=GET_HEADER)
-    assert(response.status_code == 200)
-    assert(len(response.json()['routers']) == 0)
